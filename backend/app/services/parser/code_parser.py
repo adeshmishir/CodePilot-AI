@@ -3,6 +3,7 @@ from pathlib import Path
 from tree_sitter import Parser
 from tree_sitter_language_pack import get_language
 
+from app.schemas.code_chunk import CodeChunk
 from app.schemas.code_symbol import CodeSymbol
 from app.services.parser.language_mapper import get_language_from_path
 
@@ -59,3 +60,30 @@ class CodeParser:
                 )
 
         return symbols
+
+    def create_chunks(self, file_path: Path):
+        symbols = self.extract_symbols(file_path)
+
+        chunks = []
+
+        source_lines = file_path.read_text().splitlines()
+
+        for symbol in symbols:
+            content = "\n".join(
+                source_lines[
+                    symbol.start_line - 1 : symbol.end_line
+                ]
+            )
+
+            chunks.append(
+                CodeChunk(
+                    file_path=str(file_path),
+                    symbol_name=symbol.name,
+                    symbol_type=symbol.type,
+                    start_line=symbol.start_line,
+                    end_line=symbol.end_line,
+                    content=content,
+                )
+            )
+
+        return chunks
