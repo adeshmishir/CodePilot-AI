@@ -1,7 +1,15 @@
 from fastapi import APIRouter
 
-from app.api.endpoints.health import router as health_router
+from app.api.endpoints import health
+from app.api.endpoints import repositories
 
-api_router = APIRouter()
 
-api_router.include_router(health_router)
+router = APIRouter()
+
+router.include_router(
+    health.router
+)
+
+router.include_router(
+    repositories.router
+)

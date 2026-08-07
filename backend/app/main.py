@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api.router import api_router
+from app.api.router import router
 from app.config.settings import settings
 from app.core.exceptions import RepositoryCloneError
 
@@ -12,7 +12,7 @@ app = FastAPI(
     debug=settings.DEBUG,
 )
 
-app.include_router(api_router)
+app.include_router(router)
 
 
 @app.exception_handler(RepositoryCloneError)

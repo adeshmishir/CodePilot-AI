@@ -59,9 +59,10 @@ class GitService:
 
         if self._repository_exists(owner, repository):
             return {
+                "success": True,
                 "owner": owner,
                 "repository": repository,
-                "path": str(repository_path),
+                "local_path": str(repository_path),
                 "message": "Repository already exists"
             }
 
@@ -76,9 +77,10 @@ class GitService:
         )
 
         return {
+            "success": True,
             "owner": owner,
             "repository": repository,
-            "path": str(repository_path),
+            "local_path": str(repository_path),
             "message": "Repository cloned successfully"
         }
 
