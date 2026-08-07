@@ -1,5 +1,6 @@
 from pathlib import Path
 
+
 EXTENSION_TO_LANGUAGE = {
     ".py": "python",
     ".js": "javascript",
@@ -21,5 +22,9 @@ EXTENSION_TO_LANGUAGE = {
 }
 
 
-def get_language_from_path(file_path: Path) -> str | None:
-    return EXTENSION_TO_LANGUAGE.get(file_path.suffix.lower())
+def get_language_from_path(
+    file_path: Path
+) -> str | None:
+    return EXTENSION_TO_LANGUAGE.get(
+        file_path.suffix.lower()
+    )
