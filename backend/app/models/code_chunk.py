@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text
+from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
 
@@ -6,16 +7,47 @@ from app.database.base import Base
 class CodeChunkModel(Base):
     __tablename__ = "code_chunks"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
 
-    file_path = Column(String, nullable=False)
+    repository_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "repositories.id",
+            ondelete="CASCADE"
+        ),
+        nullable=False,
+        index=True
+    )
 
-    symbol_name = Column(String, nullable=False)
+    file_path: Mapped[str] = mapped_column(
+        String,
+        nullable=False
+    )
 
-    symbol_type = Column(String, nullable=False)
+    symbol_name: Mapped[str] = mapped_column(
+        String,
+        nullable=False
+    )
 
-    start_line = Column(Integer, nullable=False)
+    symbol_type: Mapped[str] = mapped_column(
+        String,
+        nullable=False
+    )
 
-    end_line = Column(Integer, nullable=False)
+    start_line: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False
+    )
 
-    content = Column(Text, nullable=False)
+    end_line: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False
+    )
+
+    content: Mapped[str] = mapped_column(
+        Text,
+        nullable=False
+    )
