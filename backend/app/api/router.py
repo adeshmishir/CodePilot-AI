@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.endpoints import chat
 from app.api.endpoints import health
 from app.api.endpoints import repositories
 from app.api.endpoints import search
@@ -17,4 +18,8 @@ router.include_router(
 
 router.include_router(
     search.router
+)
+
+router.include_router(
+    chat.router
 )

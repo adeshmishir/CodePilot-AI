@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     QDRANT_URL: str = ":memory:"
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    RAG_CONTEXT_MAX_CHARS: int = 8000
 
     model_config = SettingsConfigDict(
         env_file=".env",
