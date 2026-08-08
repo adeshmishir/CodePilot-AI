@@ -76,8 +76,38 @@
 
 ---
 
+## ✅ Milestone 9 - Multi-Agent Workflow
+
+- Agent execution mode (`single` | `multi`)
+- Multi-agent orchestrator (routing + specialist agents)
+- Specialist agents: researcher, bug hunter, tool executor
+- Synthesis of agent reports into a single answer
+- Agent contributions surfaced in the Agent tab
+
+---
+
+## ✅ Milestone 10 - GitHub Integration
+
+- GitHub API client (token-based)
+- Open PR listing endpoint
+- AI pull request review (structured, severity-ranked comments)
+- Open issue listing endpoint
+- AI issue triage (category, severity, suggested labels)
+- GitHub tab in the frontend
+
+---
+
+## ✅ Milestone 11 - Production Deployment
+
+- Backend Dockerfile (uv, Alembic migrations on startup)
+- Frontend Dockerfile + nginx reverse proxy
+- Docker Compose stack: PostgreSQL, Qdrant, backend, frontend
+- Remote Qdrant URL support
+
+---
+
 ## Upcoming
 
-- Multi-Agent Workflow
-- GitHub Integration (PR review / issue triage)
-- Production deployment
+- PR comment posting / auto-labels (write access)
+- CI/CD pipeline
+- Usage analytics and observability

@@ -13,7 +13,10 @@ class VectorStore:
     """Handle vector storage and retrieval using Qdrant."""
 
     def __init__(self):
-        self.client = QdrantClient(path=settings.QDRANT_URL)
+        if settings.QDRANT_URL.startswith(("http://", "https://")):
+            self.client = QdrantClient(url=settings.QDRANT_URL)
+        else:
+            self.client = QdrantClient(path=settings.QDRANT_URL or ":memory:")
 
     def health_check(self) -> bool:
         """Check whether the Qdrant client is reachable."""

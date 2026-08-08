@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.0
+
+### Added
+
+- Multi-agent execution mode (`single` | `multi`) with an orchestrator and
+  specialist agents (researcher, bug hunter, tool executor)
+- GitHub API client (token-based)
+- Pull request listing and AI pull request review endpoints
+- Issue listing and AI issue triage endpoints
+- GitHub tab in the frontend
+- Production Docker deployment (Compose stack: PostgreSQL, Qdrant, backend,
+  frontend with nginx)
+- Remote Qdrant URL support in the vector store
+
+---
+
 ## v0.2.0
 
 ### Added

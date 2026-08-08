@@ -7,9 +7,14 @@ from app.agents.agent import AgentService, get_agent_service
 from app.database.session import get_db
 from app.models.repository import RepositoryModel
 from app.schemas.agent import (
+    AgentContribution,
     AgentRequest,
     AgentResponse,
     AgentToolCall,
+)
+from app.workflows.multi_agent.orchestrator import (
+    MultiAgentOrchestrator,
+    get_multi_agent_orchestrator,
 )
 
 
@@ -31,6 +36,9 @@ def run_agent(
     request: AgentRequest,
     db: Session = Depends(get_db),
     agent: AgentService = Depends(get_agent_service),
+    orchestrator: MultiAgentOrchestrator = Depends(
+        get_multi_agent_orchestrator
+    ),
 ):
     repository = (
         db.query(RepositoryModel)
@@ -45,12 +53,20 @@ def run_agent(
         )
 
     try:
-        result = agent.run(
-            db=db,
-            repository_id=repository_id,
-            query=request.query,
-            max_steps=request.max_steps,
-        )
+        if request.mode == "multi":
+            result = orchestrator.run(
+                db=db,
+                repository_id=repository_id,
+                query=request.query,
+                max_steps=request.max_steps,
+            )
+        else:
+            result = agent.run(
+                db=db,
+                repository_id=repository_id,
+                query=request.query,
+                max_steps=request.max_steps,
+            )
     except Exception as error:
         logger.error(
             "Agent failed for repository %s: %s",
@@ -70,4 +86,8 @@ def run_agent(
             for call in result["tool_calls"]
         ],
         observations=result["observations"],
+        agents=[
+            AgentContribution(**contribution)
+            for contribution in result.get("agents", [])
+        ],
     )

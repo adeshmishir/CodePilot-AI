@@ -17,6 +17,14 @@ class AgentRequest(BaseModel):
             f"configured maximum of {settings.AGENT_MAX_STEPS}."
         ),
     )
+    mode: str = Field(
+        default="single",
+        pattern="^(single|multi)$",
+        description=(
+            "Execution mode: 'single' runs the planning agent, "
+            "'multi' runs the multi-agent orchestrator."
+        ),
+    )
 
 
 class AgentToolCall(BaseModel):
@@ -25,8 +33,21 @@ class AgentToolCall(BaseModel):
     observation: str
 
 
+class AgentContribution(BaseModel):
+    name: str
+    summary: str
+    detail: str
+
+
 class AgentResponse(BaseModel):
     answer: str
     plan: list[str]
     tool_calls: list[AgentToolCall]
     observations: list[str]
+    agents: list[AgentContribution] = Field(
+        default_factory=list,
+        description=(
+            "Specialist agent contributions. Populated when the "
+            "request runs in multi-agent mode."
+        ),
+    )
