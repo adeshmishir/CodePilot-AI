@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { AgentTab } from "@/components/agent-tab"
 import { BugDetectionTab } from "@/components/bug-detection-tab"
 import { ChatTab } from "@/components/chat-tab"
+import { GitHubTab } from "@/components/github-tab"
 import { RepositorySidebar } from "@/components/repository-sidebar"
 import { SearchTab } from "@/components/search-tab"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -102,6 +103,7 @@ export default function App() {
                 <TabsTrigger value="search">Search</TabsTrigger>
                 <TabsTrigger value="agent">Agent</TabsTrigger>
                 <TabsTrigger value="bugs">Bug Detection</TabsTrigger>
+                <TabsTrigger value="github">GitHub</TabsTrigger>
               </TabsList>
 
               <TabsContent value="chat" className="mt-4">
@@ -115,6 +117,9 @@ export default function App() {
               </TabsContent>
               <TabsContent value="bugs" className="mt-4">
                 <BugDetectionTab repositoryId={selected.id} />
+              </TabsContent>
+              <TabsContent value="github" className="mt-4">
+                <GitHubTab repositoryId={selected.id} />
               </TabsContent>
             </Tabs>
           ) : (

@@ -16,15 +16,16 @@ interface AgentTabProps {
 
 export function AgentTab({ repositoryId }: AgentTabProps) {
   const [query, setQuery] = useState("")
+  const [multi, setMulti] = useState(false)
   const { loading, error, result, run } = useAsyncSubmit(
-    (q: string) =>
-      apiClient.runAgent(repositoryId, { query: q, max_steps: 5 }),
+    (q: string, mode: "single" | "multi") =>
+      apiClient.runAgent(repositoryId, { query: q, max_steps: 5, mode }),
   )
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!query.trim() || loading) return
-    void run(query.trim())
+    void run(query.trim(), multi ? "multi" : "single")
   }
 
   return (
@@ -36,7 +37,27 @@ export function AgentTab({ repositoryId }: AgentTabProps) {
           onChange={(event) => setQuery(event.target.value)}
           disabled={loading}
         />
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              variant={!multi ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMulti(false)}
+              disabled={loading}
+            >
+              Single agent
+            </Button>
+            <Button
+              type="button"
+              variant={multi ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMulti(true)}
+              disabled={loading}
+            >
+              Multi agent
+            </Button>
+          </div>
           <Button type="submit" disabled={loading || !query.trim()}>
             {loading ? "Agent is working…" : "Run agent"}
           </Button>
@@ -58,6 +79,29 @@ function AgentResult({ result }: { result: AgentResponse }) {
           {result.answer}
         </CardContent>
       </Card>
+
+      {result.agents.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold">Agents</h3>
+          {result.agents.map((agent, index) => (
+            <Card key={index}>
+              <CardContent className="flex flex-col gap-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <Badge>{agent.name}</Badge>
+                  <span className="text-muted-foreground">
+                    {agent.summary}
+                  </span>
+                </div>
+                {agent.detail && (
+                  <pre className="text-muted-foreground overflow-x-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">
+                    {agent.detail}
+                  </pre>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {result.plan.length > 0 && (
         <div className="flex flex-col gap-2">

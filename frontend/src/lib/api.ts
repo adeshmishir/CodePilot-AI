@@ -8,6 +8,10 @@ import type {
   CloneRepositoryRequest,
   CloneRepositoryResponse,
   HealthStatus,
+  IssueListResponse,
+  IssueTriageResponse,
+  PullRequestListResponse,
+  PullRequestReview,
   RepositoryListResponse,
   SearchRequest,
   SearchResponse,
@@ -137,6 +141,47 @@ export class ApiClient {
       {
         method: "POST",
         body: JSON.stringify(request),
+      },
+    )
+  }
+
+  async listPullRequests(
+    repositoryId: number,
+  ): Promise<PullRequestListResponse> {
+    return this.request<PullRequestListResponse>(
+      `/api/repositories/${repositoryId}/github/prs`,
+    )
+  }
+
+  async reviewPullRequest(
+    repositoryId: number,
+    pullNumber: number,
+  ): Promise<PullRequestReview> {
+    return this.request<PullRequestReview>(
+      `/api/repositories/${repositoryId}/github/prs/${pullNumber}/review`,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      },
+    )
+  }
+
+  async listIssues(
+    repositoryId: number,
+  ): Promise<IssueListResponse> {
+    return this.request<IssueListResponse>(
+      `/api/repositories/${repositoryId}/github/issues`,
+    )
+  }
+
+  async triageIssues(
+    repositoryId: number,
+  ): Promise<IssueTriageResponse> {
+    return this.request<IssueTriageResponse>(
+      `/api/repositories/${repositoryId}/github/issues/triage`,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
       },
     )
   }

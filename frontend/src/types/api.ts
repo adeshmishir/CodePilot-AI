@@ -68,6 +68,7 @@ export interface ChatResponse {
 export interface AgentRequest {
   query: string
   max_steps?: number
+  mode?: "single" | "multi"
 }
 
 export interface AgentToolCall {
@@ -76,11 +77,18 @@ export interface AgentToolCall {
   observation: string
 }
 
+export interface AgentContribution {
+  name: string
+  summary: string
+  detail: string
+}
+
 export interface AgentResponse {
   answer: string
   plan: string[]
   tool_calls: AgentToolCall[]
   observations: string[]
+  agents: AgentContribution[]
 }
 
 export type Severity = "low" | "medium" | "high" | "critical"
@@ -112,6 +120,76 @@ export interface BugDetectionSource {
 export interface BugDetectionResponse {
   findings: BugFinding[]
   sources: BugDetectionSource[]
+}
+
+export interface GitHubPullRequest {
+  number: number
+  title: string
+  author: string
+  state: string
+  created_at: string | null
+  updated_at: string | null
+  additions: number
+  deletions: number
+  changed_files: number
+  head_branch: string | null
+  base_branch: string | null
+  url: string | null
+}
+
+export interface PullRequestListResponse {
+  pull_requests: GitHubPullRequest[]
+  needs_github_token: boolean
+}
+
+export interface ReviewComment {
+  file_path: string
+  line: number | null
+  severity: string
+  category: string
+  message: string
+}
+
+export interface PullRequestReview {
+  pull_request_number: number
+  title: string
+  summary: string
+  comments: ReviewComment[]
+}
+
+export interface GitHubIssue {
+  number: number
+  title: string
+  author: string
+  state: string
+  labels: string[]
+  created_at: string | null
+  updated_at: string | null
+  url: string | null
+}
+
+export interface IssueListResponse {
+  issues: GitHubIssue[]
+  needs_github_token: boolean
+}
+
+export interface IssueTriageEntry {
+  issue_number: number
+  title: string
+  state: string
+  author: string
+  category: string
+  severity: string
+  suggested_labels: string[]
+  summary: string
+  labels: string[]
+  created_at: string | null
+  url: string | null
+}
+
+export interface IssueTriageResponse {
+  issues: IssueTriageEntry[]
+  needs_github_token: boolean
 }
 
 export interface ApiError {
