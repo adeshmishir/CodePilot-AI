@@ -8,12 +8,41 @@ from app.services.repository.repository_service import repository_service
 from app.schemas.repository import (
     CloneRepositoryRequest,
     CloneRepositoryResponse,
+    RepositoryListItem,
+    RepositoryListResponse,
 )
 
 router = APIRouter(
     prefix="/repositories",
     tags=["Repositories"]
 )
+
+
+@router.get(
+    "",
+    response_model=RepositoryListResponse
+)
+def list_repositories(
+    db: Session = Depends(get_db)
+):
+    repositories = (
+        db.query(RepositoryModel)
+        .order_by(RepositoryModel.created_at.desc())
+        .all()
+    )
+
+    return RepositoryListResponse(
+        repositories=[
+            RepositoryListItem(
+                id=repository.id,
+                owner=repository.owner,
+                name=repository.name,
+                clone_url=repository.clone_url,
+                local_path=repository.local_path,
+            )
+            for repository in repositories
+        ]
+    )
 
 
 @router.post(
@@ -55,4 +84,11 @@ async def clone_repository(
             db=db
         )
 
-    return result
+    return {
+        "success": result["success"],
+        "id": repository.id,
+        "repository": result["repository"],
+        "owner": result["owner"],
+        "local_path": result["local_path"],
+        "message": result["message"],
+    }
