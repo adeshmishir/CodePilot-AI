@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GITHUB_TOKEN: str = ""
     DATABASE_URL: str = ""
-    QDRANT_URL: str = ""
+    QDRANT_URL: str = ":memory:"
+    EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -8,6 +8,37 @@ from app.schemas.code_symbol import CodeSymbol
 from app.services.parser.language_mapper import get_language_from_path
 
 
+SYMBOL_NODE_TYPES = {
+    "function_definition",
+    "class_definition",
+    "function_declaration",
+    "generator_function_declaration",
+    "class_declaration",
+    "method_definition",
+    "method_declaration",
+    "constructor_declaration",
+    "interface_declaration",
+    "type_alias_declaration",
+    "enum_declaration",
+    "type_spec",
+    "function_item",
+    "struct_item",
+    "enum_item",
+    "trait_item",
+    "struct_specifier",
+    "class_specifier",
+    "property_declaration",
+    "struct_declaration",
+    "protocol_declaration",
+}
+
+ANONYMOUS_FUNCTION_TYPES = {
+    "arrow_function",
+    "anonymous_function",
+    "lambda",
+}
+
+
 class CodeParser:
     def __init__(self):
         self.parser = Parser()
@@ -32,34 +63,73 @@ class CodeParser:
         tree = self.parse_file(file_path)
         return tree.root_node
 
+    def _extract_name(self, node):
+        name_node = node.child_by_field_name("name")
+
+        if name_node is not None:
+            return name_node.text.decode()
+
+        if node.type in ANONYMOUS_FUNCTION_TYPES:
+            parent = node.parent
+
+            while parent is not None:
+                if parent.type in (
+                    "variable_declarator",
+                    "assignment_left",
+                    "field_definition",
+                ):
+                    name_node = parent.child_by_field_name("name")
+
+                    if name_node is not None:
+                        return name_node.text.decode()
+
+                parent = parent.parent
+
+        return None
+
     def extract_symbols(self, file_path: Path):
         root = self.get_root_node(file_path)
 
         symbols = []
 
-        for node in root.children:
-            if node.type == "decorated_definition":
-                definition = node.child_by_field_name("definition")
-                if definition is None:
-                    continue
-                node = definition
+        def visit(node):
+            if (
+                node.type in SYMBOL_NODE_TYPES
+                or node.type in ANONYMOUS_FUNCTION_TYPES
+            ):
+                name = self._extract_name(node)
 
-            if node.type not in ("function_definition", "class_definition"):
-                continue
-
-            name_node = node.child_by_field_name("name")
-
-            if name_node:
-                symbols.append(
-                    CodeSymbol(
-                        name=name_node.text.decode(),
-                        type=node.type,
-                        start_line=node.start_point[0] + 1,
-                        end_line=node.end_point[0] + 1,
+                if name:
+                    symbols.append(
+                        CodeSymbol(
+                            name=name,
+                            type=node.type,
+                            start_line=node.start_point[0] + 1,
+                            end_line=node.end_point[0] + 1,
+                        )
                     )
-                )
 
-        return symbols
+            for child in node.children:
+                visit(child)
+
+        visit(root)
+
+        unique_symbols = []
+        seen = set()
+
+        for symbol in symbols:
+            key = (
+                symbol.name,
+                symbol.type,
+                symbol.start_line,
+                symbol.end_line,
+            )
+
+            if key not in seen:
+                seen.add(key)
+                unique_symbols.append(symbol)
+
+        return unique_symbols
 
     def create_chunks(self, file_path: Path):
         symbols = self.extract_symbols(file_path)
