@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.endpoints import agent
 from app.api.endpoints import chat
 from app.api.endpoints import health
 from app.api.endpoints import repositories
@@ -22,4 +23,8 @@ router.include_router(
 
 router.include_router(
     chat.router
+)
+
+router.include_router(
+    agent.router
 )

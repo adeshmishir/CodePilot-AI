@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     RAG_CONTEXT_MAX_CHARS: int = 8000
+    AGENT_MAX_STEPS: int = 5
 
     model_config = SettingsConfigDict(
         env_file=".env",
