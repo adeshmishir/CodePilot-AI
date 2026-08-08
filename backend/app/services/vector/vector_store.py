@@ -76,3 +76,25 @@ class VectorStore:
             query_filter=query_filter,
             limit=limit,
         ).points
+
+    def delete_repository_points(self, repository_id: int) -> None:
+        from qdrant_client.models import (
+            FieldCondition,
+            Filter,
+            FilterSelector,
+            MatchValue,
+        )
+
+        self.client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=FilterSelector(
+                filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="repository_id",
+                            match=MatchValue(value=repository_id),
+                        )
+                    ]
+                )
+            ),
+        )

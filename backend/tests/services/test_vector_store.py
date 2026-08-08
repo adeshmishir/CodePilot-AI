@@ -127,3 +127,45 @@ def test_search_filters_by_repository(tmp_path, monkeypatch):
 
     assert [point.id for point in repo_one] == [1]
     assert [point.id for point in repo_two] == [2]
+
+
+def test_delete_repository_points(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.QDRANT_URL",
+        str(tmp_path),
+    )
+
+    store = VectorStore()
+    store.create_collection()
+
+    store.upsert_embedding(
+        point_id=1,
+        vector=make_vector(),
+        payload={"repository_id": 1},
+    )
+    store.upsert_embedding(
+        point_id=2,
+        vector=make_vector(),
+        payload={"repository_id": 1},
+    )
+    store.upsert_embedding(
+        point_id=3,
+        vector=make_vector(),
+        payload={"repository_id": 2},
+    )
+
+    store.delete_repository_points(1)
+
+    repo_one = store.search(
+        vector=make_vector(),
+        limit=10,
+        repository_id=1,
+    )
+    repo_two = store.search(
+        vector=make_vector(),
+        limit=10,
+        repository_id=2,
+    )
+
+    assert [point.id for point in repo_one] == []
+    assert [point.id for point in repo_two] == [3]

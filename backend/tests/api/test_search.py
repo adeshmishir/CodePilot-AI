@@ -73,7 +73,7 @@ def client():
 
 def test_search_success(client):
     response = client.post(
-        "/repositories/1/search",
+        "/api/repositories/1/search",
         json={"query": "Where is authentication handled?", "limit": 5},
     )
 
@@ -98,7 +98,7 @@ def test_search_success(client):
 
 def test_empty_query_rejected(client):
     response = client.post(
-        "/repositories/1/search",
+        "/api/repositories/1/search",
         json={"query": "", "limit": 5},
     )
 
@@ -108,13 +108,13 @@ def test_empty_query_rejected(client):
 def test_limit_validation(client):
     for limit in (0, -1, 21):
         response = client.post(
-            "/repositories/1/search",
+            "/api/repositories/1/search",
             json={"query": "authentication", "limit": limit},
         )
         assert response.status_code == 422
 
     response = client.post(
-        "/repositories/1/search",
+        "/api/repositories/1/search",
         json={"query": "authentication", "limit": 10},
     )
     assert response.status_code == 200
@@ -124,7 +124,7 @@ def test_invalid_repository_returns_404(client):
     client.fake_db.repository_id = 9999
 
     response = client.post(
-        "/repositories/9999/search",
+        "/api/repositories/9999/search",
         json={"query": "authentication", "limit": 5},
     )
 
@@ -134,7 +134,7 @@ def test_invalid_repository_returns_404(client):
 
 def test_missing_query_rejected(client):
     response = client.post(
-        "/repositories/1/search",
+        "/api/repositories/1/search",
         json={"limit": 5},
     )
 

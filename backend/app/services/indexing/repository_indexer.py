@@ -31,6 +31,10 @@ class RepositoryIndexer:
                     f"Failed parsing {file}: {error}"
                 )
 
+        db.query(CodeChunkModel).filter(
+            CodeChunkModel.repository_id == repository_id
+        ).delete(synchronize_session=False)
+
         for chunk in chunks:
             code_chunk = CodeChunkModel(
                 repository_id=repository_id,

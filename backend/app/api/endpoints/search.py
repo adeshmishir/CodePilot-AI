@@ -15,7 +15,7 @@ from app.services.retrieval.retrieval_service import (
 
 
 router = APIRouter(
-    prefix="/repositories/{repository_id}",
+    prefix="/api/repositories/{repository_id}",
     tags=["Search"]
 )
 

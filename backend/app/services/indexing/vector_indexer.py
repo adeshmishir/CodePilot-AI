@@ -29,6 +29,8 @@ class VectorIndexer:
 
         self.vector_store.create_collection()
 
+        self.vector_store.delete_repository_points(repository_id)
+
         for chunk in chunks:
             vector = self.embedding_service.embed(chunk.content)
 
