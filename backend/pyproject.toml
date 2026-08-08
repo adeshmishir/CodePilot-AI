@@ -18,3 +18,12 @@ dependencies = [
     "tree-sitter-language-pack>=1.14.3",
     "uvicorn>=0.52.1",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

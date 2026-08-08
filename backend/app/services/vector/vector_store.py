@@ -49,3 +49,30 @@ class VectorStore:
                 )
             ],
         )
+
+    def search(
+        self,
+        vector: list[float],
+        limit: int = 5,
+        repository_id: int | None = None,
+    ):
+        query_filter = None
+
+        if repository_id is not None:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+            query_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key="repository_id",
+                        match=MatchValue(value=repository_id),
+                    )
+                ]
+            )
+
+        return self.client.query_points(
+            collection_name=COLLECTION_NAME,
+            query=vector,
+            query_filter=query_filter,
+            limit=limit,
+        ).points
