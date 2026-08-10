@@ -2,13 +2,15 @@ from app.config.settings import settings
 
 
 class EmbeddingService:
-    """Generate local vector embeddings for CodePilot."""
+    """Generate ONNX vector embeddings for CodePilot."""
 
     def __init__(self):
-        from sentence_transformers import SentenceTransformer
+        from fastembed import TextEmbedding
 
-        self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        self.model = TextEmbedding(
+            model_name=settings.EMBEDDING_MODEL,
+        )
 
     def embed(self, text: str) -> list[float]:
-        embedding = self.model.encode(text)
+        embedding = next(self.model.embed([text]))
         return embedding.tolist()

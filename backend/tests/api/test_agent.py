@@ -5,6 +5,9 @@ from app.agents.agent import get_agent_service
 from app.database.session import get_db
 from app.main import app
 from app.models.repository import RepositoryModel
+from app.workflows.multi_agent.orchestrator import (
+    get_multi_agent_orchestrator,
+)
 
 
 class FakeRepository:
@@ -70,6 +73,13 @@ class ExplodingAgentService:
         raise RuntimeError("groq is down")
 
 
+class UnusedMultiAgentOrchestrator:
+    def run(self, *args, **kwargs):
+        raise AssertionError(
+            "Multi-agent orchestrator should not run in single mode tests."
+        )
+
+
 @pytest.fixture
 def client():
     fake_db = FakeDB()
@@ -80,6 +90,9 @@ def client():
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_agent_service] = lambda: fake_agent
+    app.dependency_overrides[get_multi_agent_orchestrator] = (
+        lambda: UnusedMultiAgentOrchestrator()
+    )
 
     with TestClient(app) as test_client:
         test_client.fake_db = fake_db
@@ -178,6 +191,9 @@ def test_invalid_repository_returns_404(client):
 def test_agent_failure_returns_500(monkeypatch):
     app.dependency_overrides[get_agent_service] = (
         lambda: ExplodingAgentService()
+    )
+    app.dependency_overrides[get_multi_agent_orchestrator] = (
+        lambda: UnusedMultiAgentOrchestrator()
     )
 
     fake_db = FakeDB()
