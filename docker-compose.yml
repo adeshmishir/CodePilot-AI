@@ -3,22 +3,27 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: codepilot
-      POSTGRES_PASSWORD: codepilot
-      POSTGRES_DB: codepilot
+      POSTGRES_USER: ${POSTGRES_USER:-codepilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-codepilot}
+      POSTGRES_DB: ${POSTGRES_DB:-codepilot}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U codepilot"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codepilot}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.19.0
     restart: unless-stopped
     volumes:
       - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   backend:
     build: ./backend
@@ -29,15 +34,28 @@ services:
       DEBUG: "False"
       HOST: 0.0.0.0
       PORT: 8000
-      DATABASE_URL: postgresql+psycopg://codepilot:codepilot@postgres:5432/codepilot
+      CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173","http://localhost:8080"]'
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-codepilot}:${POSTGRES_PASSWORD:-codepilot}@postgres:5432/${POSTGRES_DB:-codepilot}
       QDRANT_URL: http://qdrant:6333
     volumes:
       - repo_data:/app/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status == 200 else 1)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
       qdrant:
-        condition: service_started
+        condition: service_healthy
 
   frontend:
     build:
@@ -45,8 +63,14 @@ services:
       args:
         VITE_API_URL: ""
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "8080:80"
 

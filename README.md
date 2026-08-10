@@ -33,6 +33,8 @@ Copy `backend/.env.example` to `backend/.env` and set:
 - `DATABASE_URL` — PostgreSQL connection string
 - `QDRANT_URL` — Qdrant location; leave as `:memory:` for local in-memory vectors,
   or point at a running Qdrant instance (e.g. `http://localhost:6333`)
+- `CORS_ORIGINS` — JSON list of allowed browser origins
+  (e.g. `["http://localhost:8080"]`)
 
 ## API
 

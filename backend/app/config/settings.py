@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     HOST: str
     PORT: int
 
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
     GROQ_API_KEY: str = ""
     GITHUB_TOKEN: str = ""
     DATABASE_URL: str = ""

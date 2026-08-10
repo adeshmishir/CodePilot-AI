@@ -68,7 +68,7 @@ frontend/dist/
 # ==========================
 # Local Data
 # ==========================
-backend/data/qdrant/
+backend/data/
 
 # ==========================
 # Docker
