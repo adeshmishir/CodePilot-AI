@@ -17,6 +17,7 @@ from app.schemas.github import (
     ReviewComment,
 )
 from app.services.github.github_client import (
+    GitHubClient,
     GitHubApiError,
     GitHubAuthError,
     GitHubNotFoundError,

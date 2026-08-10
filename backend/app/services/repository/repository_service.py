@@ -2,14 +2,21 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.services.indexing.repository_indexer import RepositoryIndexer
-from app.services.parser.repository_parser import repository_parser
-
-
 class RepositoryService:
 
     def __init__(self):
-        self.indexer = RepositoryIndexer()
+        self._indexer = None
+
+    @property
+    def indexer(self):
+        if self._indexer is None:
+            from app.services.indexing.repository_indexer import (
+                RepositoryIndexer,
+            )
+
+            self._indexer = RepositoryIndexer()
+
+        return self._indexer
 
     def index_repository(
         self,
@@ -17,6 +24,8 @@ class RepositoryService:
         repository_path: str,
         db: Session
     ):
+        from app.services.parser.repository_parser import repository_parser
+
         path = Path(repository_path)
 
         files = repository_parser.get_repository_files(
@@ -35,4 +44,16 @@ class RepositoryService:
         }
 
 
-repository_service = RepositoryService()
+repository_service: RepositoryService | None = None
+
+
+def get_repository_service() -> RepositoryService:
+    global repository_service
+
+    if repository_service is None:
+        repository_service = RepositoryService()
+
+    return repository_service
+
+
+repository_service = get_repository_service()
