@@ -27,6 +27,8 @@ class VectorStore:
         return True
 
     def create_collection(self) -> None:
+        from qdrant_client.models import PayloadSchemaType
+
         collections = self.client.get_collections().collections
         existing_names = {collection.name for collection in collections}
 
@@ -38,6 +40,19 @@ class VectorStore:
                     "distance": "Cosine",
                 },
             )
+
+        try:
+            self.client.create_payload_index(
+                collection_name=COLLECTION_NAME,
+                field_name="repository_id",
+                field_schema=PayloadSchemaType.INTEGER,
+            )
+        except Exception:
+            pass
+
+    def ensure_collection(self) -> None:
+        """Create the collection and its payload index if needed."""
+        self.create_collection()
 
     def upsert_embedding(
         self,
@@ -62,6 +77,8 @@ class VectorStore:
         limit: int = 5,
         repository_id: int | None = None,
     ):
+        self.ensure_collection()
+
         query_filter = None
 
         if repository_id is not None:
@@ -90,6 +107,8 @@ class VectorStore:
             FilterSelector,
             MatchValue,
         )
+
+        self.ensure_collection()
 
         self.client.delete(
             collection_name=COLLECTION_NAME,

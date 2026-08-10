@@ -29,6 +29,51 @@ def test_create_collection(tmp_path, monkeypatch):
     assert store.health_check() is True
 
 
+def test_search_creates_collection_when_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.QDRANT_URL",
+        str(tmp_path),
+    )
+
+    store = VectorStore()
+
+    points = store.search(
+        vector=make_vector(),
+        limit=5,
+        repository_id=1,
+    )
+
+    assert points == []
+
+    names = {
+        collection.name
+        for collection in store.client.get_collections().collections
+    }
+
+    assert COLLECTION_NAME in names
+
+
+def test_delete_repository_points_creates_collection_when_missing(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.QDRANT_URL",
+        str(tmp_path),
+    )
+
+    store = VectorStore()
+
+    store.delete_repository_points(1)
+
+    names = {
+        collection.name
+        for collection in store.client.get_collections().collections
+    }
+
+    assert COLLECTION_NAME in names
+
+
 def test_upsert_and_search(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "app.services.vector.vector_store.settings.QDRANT_URL",

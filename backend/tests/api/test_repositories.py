@@ -88,6 +88,12 @@ class FakeRepositoryService:
             }
         )
 
+        return {
+            "files_discovered": 3,
+            "chunks_created": 5,
+            "vectors_indexed": 5,
+        }
+
 
 def make_repository(id):
     repository = RepositoryModel(
@@ -214,4 +220,34 @@ def test_clone_existing_repository_skips_indexing(client):
     assert body["id"] == 1
     assert body["message"] == "Repository cloned successfully"
 
+    assert client.fake_indexer.calls == []
+
+
+def test_reindex_repository(client):
+    response = client.post("/repositories/1/reindex")
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["success"] is True
+    assert body["id"] == 1
+    assert body["repository"] == "CoinOracle"
+    assert body["owner"] == "adeshmishir"
+    assert body["message"] == (
+        "Reindexed 3 files into 5 chunks and 5 vectors."
+    )
+
+    assert client.fake_indexer.calls == [
+        {
+            "repository_id": 1,
+            "repository_path": "data/repos/adeshmishir/CoinOracle",
+        }
+    ]
+
+
+def test_reindex_missing_repository_returns_404(client):
+    response = client.post("/repositories/9999/reindex")
+
+    assert response.status_code == 404
     assert client.fake_indexer.calls == []

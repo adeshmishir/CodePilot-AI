@@ -24,7 +24,10 @@ class RepositoryService:
         repository_path: str,
         db: Session
     ):
+        from app.services.embedding.embedding_service import EmbeddingService
+        from app.services.indexing.vector_indexer import VectorIndexer
         from app.services.parser.repository_parser import repository_parser
+        from app.services.vector.vector_store import VectorStore
 
         path = Path(repository_path)
 
@@ -38,9 +41,18 @@ class RepositoryService:
             db=db
         )
 
+        vectors_indexed = VectorIndexer(
+            embedding_service=EmbeddingService(),
+            vector_store=VectorStore(),
+        ).index_repository(
+            db=db,
+            repository_id=repository_id,
+        )
+
         return {
             "files_discovered": len(files),
-            "chunks_created": len(chunks)
+            "chunks_created": len(chunks),
+            "vectors_indexed": vectors_indexed,
         }
 
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -49,7 +49,7 @@ def list_repositories(
     "/clone",
     response_model=CloneRepositoryResponse
 )
-async def clone_repository(
+def clone_repository(
     request: CloneRepositoryRequest,
     db: Session = Depends(get_db)
 ):
@@ -91,4 +91,44 @@ async def clone_repository(
         "owner": result["owner"],
         "local_path": result["local_path"],
         "message": result["message"],
+    }
+
+
+@router.post(
+    "/{repository_id}/reindex",
+    response_model=CloneRepositoryResponse
+)
+def reindex_repository(
+    repository_id: int,
+    db: Session = Depends(get_db)
+):
+    repository = (
+        db.query(RepositoryModel)
+        .filter(RepositoryModel.id == repository_id)
+        .first()
+    )
+
+    if repository is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Repository not found"
+        )
+
+    result = repository_service.index_repository(
+        repository_id=repository.id,
+        repository_path=repository.local_path,
+        db=db
+    )
+
+    return {
+        "success": True,
+        "id": repository.id,
+        "repository": repository.name,
+        "owner": repository.owner,
+        "local_path": repository.local_path,
+        "message": (
+            f"Reindexed {result['files_discovered']} files into "
+            f"{result['chunks_created']} chunks and "
+            f"{result['vectors_indexed']} vectors."
+        ),
     }
