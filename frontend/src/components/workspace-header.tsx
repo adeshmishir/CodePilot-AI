@@ -38,7 +38,10 @@ const HEALTH_META: Record<
   checking: { dot: "bg-muted-foreground animate-pulse", label: "Checking backend" },
   connected: { dot: "bg-emerald-500", label: "Connected" },
   degraded: { dot: "bg-amber-500", label: "Backend degraded" },
-  offline: { dot: "bg-destructive", label: "Backend unreachable" },
+  unavailable: {
+    dot: "bg-amber-500",
+    label: "Backend status unavailable",
+  },
 }
 
 interface WorkspaceHeaderProps {

@@ -3,7 +3,7 @@ import { createContext } from "react"
 import type { FormattedError } from "@/lib/error-format"
 import type { RepositoryListItem } from "@/types/api"
 
-export type HealthState = "checking" | "connected" | "degraded" | "offline"
+export type HealthState = "checking" | "connected" | "degraded" | "unavailable"
 
 export interface WorkspaceContextValue {
   repositories: RepositoryListItem[]

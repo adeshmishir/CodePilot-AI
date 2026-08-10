@@ -17,7 +17,28 @@ import type {
   SearchResponse,
 } from "@/types/api"
 
-const DEFAULT_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000"
+const DEV_BASE_URL = "http://localhost:8000"
+const PRODUCTION_BASE_URL = "https://codepilot-ai-yjwz.onrender.com"
+
+const envBaseUrl = import.meta.env.VITE_API_URL?.trim()
+
+function resolveBaseUrl(): string {
+  if (envBaseUrl) return envBaseUrl
+
+  if (import.meta.env.PROD) {
+    console.warn(
+      `[api] VITE_API_URL is not set. Falling back to the production backend: ${PRODUCTION_BASE_URL}`,
+    )
+    return PRODUCTION_BASE_URL
+  }
+
+  console.warn(
+    `[api] VITE_API_URL is not set. Falling back to the local backend: ${DEV_BASE_URL}`,
+  )
+  return DEV_BASE_URL
+}
+
+const DEFAULT_BASE_URL = resolveBaseUrl()
 
 export class ApiClientError extends Error {
   readonly status: number

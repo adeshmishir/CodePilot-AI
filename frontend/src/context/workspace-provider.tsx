@@ -51,25 +51,57 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true
-    const check = async () => {
+    let inFlight = false
+    let timer: number | undefined
+    let consecutiveFailures = 0
+
+    const MAX_CONSECUTIVE_FAILURES = 2
+
+    const scheduleNext = () => {
+      if (!active || document.visibilityState === "hidden") return
+      timer = window.setTimeout(() => {
+        void runCheck()
+      }, HEALTH_POLL_MS)
+    }
+
+    const runCheck = async () => {
+      if (inFlight || !active) return
+      inFlight = true
       try {
         const status = await apiClient.health()
         if (!active) return
+        consecutiveFailures = 0
         setHealth(status.status === "healthy" ? "connected" : "degraded")
       } catch (caught) {
         if (!active) return
-        setHealth(
-          caught instanceof ApiClientError && caught.status === 503
-            ? "degraded"
-            : "offline",
-        )
+        if (caught instanceof ApiClientError) {
+          consecutiveFailures = 0
+          setHealth("degraded")
+        } else {
+          consecutiveFailures += 1
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            setHealth("unavailable")
+          }
+        }
+      } finally {
+        inFlight = false
+        scheduleNext()
       }
     }
-    void check()
-    const timer = setInterval(() => void check(), HEALTH_POLL_MS)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        if (timer !== undefined) window.clearTimeout(timer)
+        void runCheck()
+      }
+    }
+
+    void runCheck()
+    document.addEventListener("visibilitychange", handleVisibilityChange)
     return () => {
       active = false
-      clearInterval(timer)
+      if (timer !== undefined) window.clearTimeout(timer)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
   }, [])
 
