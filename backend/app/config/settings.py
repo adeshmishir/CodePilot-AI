@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     GITHUB_TOKEN: str = ""
     DATABASE_URL: str = ""
     QDRANT_URL: str = ":memory:"
+    QDRANT_API_KEY: str = ""
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     RAG_CONTEXT_MAX_CHARS: int = 8000

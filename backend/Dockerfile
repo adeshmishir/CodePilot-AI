@@ -16,6 +16,8 @@ COPY app ./app
 COPY alembic.ini ./
 COPY alembic ./alembic
 
+
+
 RUN uv sync --frozen --no-dev
 
 EXPOSE 8000
