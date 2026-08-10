@@ -11,8 +11,9 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
+    "http://127.0.0.1:5173",
+    "https://code-pilot-ai-puce.vercel.app",
+]
 
     GROQ_API_KEY: str = ""
     GITHUB_TOKEN: str = ""
