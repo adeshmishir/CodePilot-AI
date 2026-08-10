@@ -32,6 +32,13 @@ export class ApiClientError extends Error {
   }
 }
 
+export class TimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Request timed out after ${timeoutMs}ms`)
+    this.name = "TimeoutError"
+  }
+}
+
 export class ApiClient {
   private readonly baseUrl: string
 
@@ -46,34 +53,49 @@ export class ApiClient {
   private async request<T>(
     path: string,
     init?: RequestInit,
+    options?: { timeoutMs?: number },
   ): Promise<T> {
-    const response = await fetch(`${this.base}${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...init?.headers,
-      },
-    })
+    const timeoutMs = options?.timeoutMs ?? 60_000
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
 
-    if (!response.ok) {
-      let message = `Request failed with status ${response.status}`
-      try {
-        const body = (await response.json()) as {
-          detail?: unknown
-          message?: string
+    try {
+      const response = await fetch(`${this.base}${path}`, {
+        ...init,
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          ...init?.headers,
+        },
+      })
+
+      if (!response.ok) {
+        let message = `Request failed with status ${response.status}`
+        try {
+          const body = (await response.json()) as {
+            detail?: unknown
+            message?: string
+          }
+          if (typeof body.detail === "string") {
+            message = body.detail
+          } else if (body.message) {
+            message = body.message
+          }
+        } catch {
+          // fall back to the status-based message
         }
-        if (typeof body.detail === "string") {
-          message = body.detail
-        } else if (body.message) {
-          message = body.message
-        }
-      } catch {
-        // fall back to the status-based message
+        throw new ApiClientError(message, response.status)
       }
-      throw new ApiClientError(message, response.status)
-    }
 
-    return response.json() as Promise<T>
+      return response.json() as Promise<T>
+    } catch (caught) {
+      if (controller.signal.aborted) {
+        throw new TimeoutError(timeoutMs)
+      }
+      throw caught
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   async health(): Promise<HealthStatus> {

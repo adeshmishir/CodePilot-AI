@@ -2,10 +2,14 @@
 
 import { useState } from "react"
 
+import { GitBranch, GitPullRequest } from "lucide-react"
+
+import { Spinner } from "@/components/loading"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAsyncSubmit } from "@/hooks/use-async-submit"
+import { useRepositoryReset } from "@/hooks/use-repository-reset"
 import { apiClient } from "@/lib/api"
 import type {
   GitHubPullRequest,
@@ -57,6 +61,12 @@ function PullRequestSection({
 
   const [reviewed, setReviewed] = useState<PullRequestReview | null>(null)
 
+  useRepositoryReset(repositoryId, () => {
+    list.reset()
+    review.reset()
+    setReviewed(null)
+  })
+
   const handleLoad = async () => {
     setReviewed(null)
     const result = await list.run()
@@ -72,17 +82,29 @@ function PullRequestSection({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Pull Requests</h3>
+        <h3 className="text-sm font-semibold flex items-center gap-1.5">
+          <GitPullRequest className="text-muted-foreground size-4" />
+          Pull Requests
+        </h3>
         <Button
           variant="outline"
           onClick={() => void handleLoad()}
           disabled={list.loading}
         >
-          {list.loading ? "Loading…" : "Load open PRs"}
+          {list.loading ? (
+            <span className="flex items-center gap-1.5">
+              <Spinner className="size-3.5" />
+              Loading
+            </span>
+          ) : (
+            "Load open PRs"
+          )}
         </Button>
       </div>
 
-      {list.error && <p className="text-destructive text-sm">{list.error}</p>}
+      {list.error && (
+        <p className="text-destructive text-sm">{list.error.message}</p>
+      )}
 
       {list.result && list.result.pull_requests.length === 0 && (
         <p className="text-muted-foreground text-sm">
@@ -100,7 +122,7 @@ function PullRequestSection({
       ))}
 
       {review.error && (
-        <p className="text-destructive text-sm">{review.error}</p>
+        <p className="text-destructive text-sm">{review.error.message}</p>
       )}
 
       {reviewed && <ReviewResult review={reviewed} />}
@@ -123,8 +145,11 @@ function PullRequestCard({
     <Card>
       <CardContent className="flex flex-col gap-2 text-sm">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-medium">
-            #{pr.number} {pr.title}
+          <span className="font-medium flex min-w-0 items-center gap-1.5">
+            <GitPullRequest className="text-muted-foreground size-4 shrink-0" />
+            <span className="truncate">
+              #{pr.number} {pr.title}
+            </span>
           </span>
           <Button
             variant="secondary"
@@ -132,7 +157,14 @@ function PullRequestCard({
             onClick={onReview}
             disabled={reviewing}
           >
-            {reviewing ? "Reviewing…" : "Review"}
+            {reviewing ? (
+              <span className="flex items-center gap-1.5">
+                <Spinner className="size-3.5" />
+                Reviewing
+              </span>
+            ) : (
+              "Review"
+            )}
           </Button>
         </div>
 
@@ -217,6 +249,12 @@ function IssueSection({
 
   const [triaged, setTriaged] = useState<IssueTriageEntry[] | null>(null)
 
+  useRepositoryReset(repositoryId, () => {
+    list.reset()
+    triage.reset()
+    setTriaged(null)
+  })
+
   const handleLoad = async () => {
     setTriaged(null)
     const result = await list.run()
@@ -234,27 +272,46 @@ function IssueSection({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Issues</h3>
+        <h3 className="text-sm font-semibold flex items-center gap-1.5">
+          <GitBranch className="text-muted-foreground size-4" />
+          Issues
+        </h3>
         <div className="flex gap-2">
           <Button
             variant="outline"
             onClick={() => void handleLoad()}
             disabled={list.loading}
           >
-            {list.loading ? "Loading…" : "Load open issues"}
+            {list.loading ? (
+              <span className="flex items-center gap-1.5">
+                <Spinner className="size-3.5" />
+                Loading
+              </span>
+            ) : (
+              "Load open issues"
+            )}
           </Button>
           <Button
             onClick={() => void handleTriage()}
             disabled={triage.loading}
           >
-            {triage.loading ? "Triaging…" : "Triage issues"}
+            {triage.loading ? (
+              <span className="flex items-center gap-1.5">
+                <Spinner className="size-3.5" />
+                Triaging
+              </span>
+            ) : (
+              "Triage issues"
+            )}
           </Button>
         </div>
       </div>
 
-      {list.error && <p className="text-destructive text-sm">{list.error}</p>}
+      {list.error && (
+        <p className="text-destructive text-sm">{list.error.message}</p>
+      )}
       {triage.error && (
-        <p className="text-destructive text-sm">{triage.error}</p>
+        <p className="text-destructive text-sm">{triage.error.message}</p>
       )}
 
       {triaged === null && list.result && list.result.issues.length === 0 && (

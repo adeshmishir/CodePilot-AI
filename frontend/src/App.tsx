@@ -1,6 +1,16 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
+
+import {
+  Bot,
+  Bug,
+  FolderGit2,
+  GitPullRequest,
+  MessageSquare,
+  Search,
+  Sparkles,
+} from "lucide-react"
 
 import { AgentTab } from "@/components/agent-tab"
 import { BugDetectionTab } from "@/components/bug-detection-tab"
@@ -8,128 +18,140 @@ import { ChatTab } from "@/components/chat-tab"
 import { GitHubTab } from "@/components/github-tab"
 import { RepositorySidebar } from "@/components/repository-sidebar"
 import { SearchTab } from "@/components/search-tab"
+import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { apiClient, ApiClientError } from "@/lib/api"
-import type { RepositoryListItem } from "@/types/api"
+import { WorkspaceHeader } from "@/components/workspace-header"
+import type { WorkspaceTab } from "@/components/workspace-header"
+import { WorkspaceProvider } from "@/context/workspace-provider"
+import { useWorkspace } from "@/context/use-workspace"
 
 export default function App() {
-  const [repositories, setRepositories] = useState<RepositoryListItem[]>([])
-  const [selected, setSelected] = useState<RepositoryListItem | null>(null)
-  const [cloning, setCloning] = useState(false)
-  const [cloneError, setCloneError] = useState<string | null>(null)
-  const [listError, setListError] = useState<string | null>(null)
+  return (
+    <WorkspaceProvider>
+      <Workspace />
+    </WorkspaceProvider>
+  )
+}
 
-  const loadRepositories = async (): Promise<RepositoryListItem[]> => {
-    try {
-      const response = await apiClient.listRepositories()
-      setRepositories(response.repositories)
-      setListError(null)
-      return response.repositories
-    } catch (caught) {
-      setListError(
-        caught instanceof Error ? caught.message : "Unable to load repositories",
-      )
-      return []
-    }
-  }
-
-  useEffect(() => {
-    void loadRepositories()
-  }, [])
-
-  const handleClone = async (url: string) => {
-    setCloning(true)
-    setCloneError(null)
-    try {
-      const result = await apiClient.cloneRepository({ url })
-      const updated = await loadRepositories()
-      const repository = updated.find(
-        (item) => item.id === result.id,
-      )
-      if (repository) {
-        setSelected(repository)
-      }
-    } catch (caught) {
-      setCloneError(
-        caught instanceof ApiClientError || caught instanceof Error
-          ? caught.message
-          : "Unable to clone repository",
-      )
-    } finally {
-      setCloning(false)
-    }
-  }
-
-  const handleSelect = (repository: RepositoryListItem) => {
-    setSelected(repository)
-  }
+function Workspace() {
+  const { selected, selectedId, sidebarOpen, setSidebarOpen, listError, refreshRepositories } =
+    useWorkspace()
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("chat")
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <RepositorySidebar
-        repositories={repositories}
-        selectedId={selected?.id ?? null}
-        onSelect={handleSelect}
-        onClone={handleClone}
-        cloning={cloning}
-        error={cloneError}
-      />
+    <div className="bg-background text-foreground flex h-dvh overflow-hidden">
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
-      <main className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between border-b px-6 py-4">
-          <h1 className="text-lg font-semibold">CodePilot AI</h1>
-          {selected ? (
-            <span className="text-muted-foreground text-sm">
-              {selected.owner}/{selected.name}
-            </span>
-          ) : (
-            <span className="text-muted-foreground text-sm">
-              Select a repository to begin
-            </span>
-          )}
-        </header>
+      <RepositorySidebar />
+
+      <main className="flex min-w-0 flex-1 flex-col">
+        <WorkspaceHeader activeTab={activeTab} />
 
         {listError && (
-          <p className="border-b bg-destructive/10 px-6 py-2 text-sm text-destructive">
-            {listError}
-          </p>
+          <div className="border-border flex items-center justify-between gap-3 border-b bg-destructive/10 px-4 py-2 sm:px-6">
+            <p className="text-destructive text-sm">{listError.message}</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={refreshRepositories}
+            >
+              Retry
+            </Button>
+          </div>
         )}
 
-        <div className="flex-1 overflow-auto p-6">
-          {selected ? (
-            <Tabs defaultValue="chat">
-              <TabsList>
-                <TabsTrigger value="chat">Chat</TabsTrigger>
-                <TabsTrigger value="search">Search</TabsTrigger>
-                <TabsTrigger value="agent">Agent</TabsTrigger>
-                <TabsTrigger value="bugs">Bug Detection</TabsTrigger>
-                <TabsTrigger value="github">GitHub</TabsTrigger>
-              </TabsList>
+        {selected && selectedId !== null ? (
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as WorkspaceTab)}
+            className="min-h-0 flex-1 overflow-hidden"
+          >
+            <TabsList className="mx-3 mt-3 max-w-[calc(100%-1.5rem)] overflow-x-auto md:mx-auto">
+              <TabsTrigger value="chat">
+                <MessageSquare className="size-4" />
+                <span className="hidden sm:inline">Chat</span>
+              </TabsTrigger>
+              <TabsTrigger value="search">
+                <Search className="size-4" />
+                <span className="hidden sm:inline">Search</span>
+              </TabsTrigger>
+              <TabsTrigger value="agent">
+                <Bot className="size-4" />
+                <span className="hidden sm:inline">Agent</span>
+              </TabsTrigger>
+              <TabsTrigger value="bugs">
+                <Bug className="size-4" />
+                <span className="hidden sm:inline">Bug Detection</span>
+              </TabsTrigger>
+              <TabsTrigger value="github">
+                <GitPullRequest className="size-4" />
+                <span className="hidden sm:inline">GitHub</span>
+              </TabsTrigger>
+            </TabsList>
 
-              <TabsContent value="chat" className="mt-4">
-                <ChatTab repositoryId={selected.id} />
-              </TabsContent>
-              <TabsContent value="search" className="mt-4">
-                <SearchTab repositoryId={selected.id} />
-              </TabsContent>
-              <TabsContent value="agent" className="mt-4">
-                <AgentTab repositoryId={selected.id} />
-              </TabsContent>
-              <TabsContent value="bugs" className="mt-4">
-                <BugDetectionTab repositoryId={selected.id} />
-              </TabsContent>
-              <TabsContent value="github" className="mt-4">
-                <GitHubTab repositoryId={selected.id} />
-              </TabsContent>
-            </Tabs>
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <p className="text-muted-foreground">
-                Clone a repository from the sidebar to get started.
-              </p>
+            <TabsContent
+              value="chat"
+              forceMount
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
+              <ChatTab repositoryId={selectedId} />
+            </TabsContent>
+            <TabsContent
+              value="search"
+              forceMount
+              className="min-h-0 flex-1 overflow-y-auto pt-4 sm:pt-6"
+            >
+              <SearchTab repositoryId={selectedId} />
+            </TabsContent>
+            <TabsContent
+              value="agent"
+              forceMount
+              className="min-h-0 flex-1 overflow-y-auto pt-4 sm:pt-6"
+            >
+              <AgentTab repositoryId={selectedId} />
+            </TabsContent>
+            <TabsContent
+              value="bugs"
+              forceMount
+              className="min-h-0 flex-1 overflow-y-auto pt-4 sm:pt-6"
+            >
+              <BugDetectionTab repositoryId={selectedId} />
+            </TabsContent>
+            <TabsContent
+              value="github"
+              forceMount
+              className="min-h-0 flex-1 overflow-y-auto pt-4 sm:pt-6"
+            >
+              <GitHubTab repositoryId={selectedId} />
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+            <div className="bg-primary/10 flex size-14 items-center justify-center rounded-2xl">
+              <Sparkles className="text-primary size-7" />
             </div>
-          )}
-        </div>
+            <h2 className="text-base font-semibold">Get started with CodePilot</h2>
+            <p className="text-muted-foreground max-w-sm text-sm">
+              Clone a repository from the sidebar to ask questions, search
+              the code, run agents, and detect bugs.
+            </p>
+            <Button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="mt-1 md:hidden"
+            >
+              <FolderGit2 className="size-4" />
+              Open repositories
+            </Button>
+          </div>
+        )}
       </main>
     </div>
   )
