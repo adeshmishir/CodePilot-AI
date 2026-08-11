@@ -155,10 +155,14 @@ export class ApiClient {
   async cloneRepository(
     request: CloneRepositoryRequest,
   ): Promise<CloneRepositoryResponse> {
-    return this.request<CloneRepositoryResponse>("/repositories/clone", {
-      method: "POST",
-      body: JSON.stringify(request),
-    })
+    return this.request<CloneRepositoryResponse>(
+      "/repositories/clone",
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      },
+      { timeoutMs: 300_000 },
+    )
   }
 
   async reindexRepository(
@@ -169,6 +173,7 @@ export class ApiClient {
       {
         method: "POST",
       },
+      { timeoutMs: 300_000 },
     )
   }
 
