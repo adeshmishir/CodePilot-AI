@@ -48,8 +48,16 @@ class RepositoryService:
         self,
         repository_id: int,
         repository_path: str,
-        db: Session
+        db: Session,
+        progress=None,
     ):
+        """Index a repository, reporting progress through ``progress(done, total)``.
+
+        Rows are flushed to the database after every file so the ORM session
+        never buffers the whole repository's chunk content in memory, which
+        is what pushed the free-tier instance over its 512 MB limit on
+        larger repositories.
+        """
         from app.services.indexing.vector_indexer import VectorIndexer
         from app.services.parser.repository_parser import repository_parser
 
@@ -85,6 +93,8 @@ class RepositoryService:
         total_vectors = 0
         new_point_ids: set[int] = set()
         rows_replaced = False
+        processed_files = 0
+        total_files = len(files)
 
         for file_chunks in self.indexer.iter_file_chunks(files):
             if not rows_replaced:
@@ -114,9 +124,18 @@ class RepositoryService:
                 ],
             )
 
+            # Push the buffered rows to the database inside the same
+            # transaction so memory stays bounded by one file at a time.
+            db.flush()
+
             total_chunks += len(file_chunks)
             total_vectors += vectors
             new_point_ids.update(point_ids)
+
+            processed_files += 1
+
+            if progress is not None:
+                progress(processed_files, total_files)
 
         if total_chunks == 0:
             raise RepositoryIndexError(

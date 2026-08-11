@@ -8,11 +8,24 @@ export interface CloneRepositoryRequest {
 
 export interface CloneRepositoryResponse {
   success: boolean
-  id: number
-  repository: string
-  owner: string
-  local_path: string
+  job_id?: string | null
+  status?: string | null
+  id?: number | null
+  repository?: string | null
+  owner?: string | null
+  local_path?: string | null
   message: string
+}
+
+export interface CloneJobStatus {
+  job_id: string
+  status: string
+  phase: string
+  files_done: number
+  files_total: number
+  message: string
+  error: string
+  repository_id: number | null
 }
 
 export interface RepositoryListItem {

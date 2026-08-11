@@ -71,6 +71,35 @@ class FakeDB:
     def refresh(self, instance):
         instance.id = 1
 
+    def rollback(self):
+        pass
+
+    def flush(self):
+        pass
+
+    def close(self):
+        pass
+
+
+class SyncThread:
+    """Run background threads synchronously so tests stay deterministic."""
+
+    def __init__(
+        self,
+        group=None,
+        target=None,
+        name=None,
+        args=(),
+        kwargs=None,
+        daemon=None,
+    ):
+        self._target = target
+        self._args = args
+        self._kwargs = kwargs or {}
+
+    def start(self):
+        self._target(*self._args, **self._kwargs)
+
 
 class FakeGitService:
     def clone_repository(self, url):
@@ -89,13 +118,16 @@ class FakeRepositoryService:
     def __init__(self):
         self.calls = []
 
-    def index_repository(self, repository_id, repository_path, db):
+    def index_repository(self, repository_id, repository_path, db, progress=None):
         self.calls.append(
             {
                 "repository_id": repository_id,
                 "repository_path": repository_path,
             }
         )
+
+        if progress is not None:
+            progress(3, 3)
 
         return {
             "files_discovered": 3,
@@ -168,6 +200,16 @@ def client(monkeypatch):
         fake_indexer.cleanup_repository,
     )
 
+    monkeypatch.setattr(
+        "app.api.endpoints.repositories.threading.Thread",
+        SyncThread,
+    )
+
+    monkeypatch.setattr(
+        "app.api.endpoints.repositories.SessionLocal",
+        lambda: fake_db,
+    )
+
     def override_get_db():
         yield fake_db
 
@@ -220,15 +262,23 @@ def test_clone_new_repository(client):
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
 
     body = response.json()
 
     assert body["success"] is True
-    assert body["id"] == 1
-    assert body["repository"] == "NewProject"
-    assert body["owner"] == "adeshmishir"
-    assert body["message"] == (
+    assert body["job_id"] == "adeshmishir/NewProject"
+    assert body["status"] == "running"
+
+    status = client.get("/repositories/clone/status/adeshmishir/NewProject")
+
+    assert status.status_code == 200
+
+    status_body = status.json()
+
+    assert status_body["status"] == "done"
+    assert status_body["repository_id"] == 1
+    assert status_body["message"] == (
         "Cloned and indexed 3 files into 5 chunks and 5 vectors."
     )
 
@@ -253,6 +303,7 @@ def test_clone_existing_healthy_repository_skips_indexing(client):
     body = response.json()
 
     assert body["id"] == 1
+    assert body["job_id"] is None
     assert body["message"] == "Repository already exists and is up to date."
 
     assert client.fake_indexer.calls == []
@@ -289,12 +340,16 @@ def test_clone_existing_broken_repository_is_reindexed(
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
 
-    body = response.json()
+    status = client.get("/repositories/clone/status/adeshmishir/CoinOracle")
 
-    assert body["id"] == 1
-    assert body["message"] == (
+    assert status.status_code == 200
+
+    status_body = status.json()
+
+    assert status_body["status"] == "done"
+    assert status_body["message"] == (
         "Repository recovered and re-indexed 3 files into 5 chunks and "
         "5 vectors."
     )
@@ -305,6 +360,42 @@ def test_clone_existing_broken_repository_is_reindexed(
             "repository_path": "data/repos/adeshmishir/CoinOracle",
         }
     ]
+
+
+def test_clone_status_not_found(client):
+    response = client.get("/repositories/clone/status/unknown/owner")
+
+    assert response.status_code == 404
+
+
+def test_clone_returns_running_job_when_already_in_progress(
+    client,
+    monkeypatch,
+):
+    from app.services.repository.clone_progress import clone_progress
+
+    monkeypatch.setattr(
+        "app.api.endpoints.repositories.clone_progress",
+        clone_progress,
+    )
+
+    clone_progress.start("adeshmishir/BusyProject")
+
+    response = client.post(
+        "/repositories/clone",
+        json={
+            "url": "https://github.com/adeshmishir/BusyProject",
+        },
+    )
+
+    assert response.status_code == 202
+
+    body = response.json()
+
+    assert body["status"] == "running"
+    assert body["message"] == "Clone already in progress."
+
+    clone_progress.update("adeshmishir/BusyProject", status="done")
 
 
 def test_reindex_repository(client):
@@ -369,7 +460,7 @@ def test_clone_rolls_back_row_when_indexing_fails(
     before = len(client.fake_db.repositories)
 
     class FailingRepositoryService:
-        def index_repository(self, repository_id, repository_path, db):
+        def index_repository(self, repository_id, repository_path, db, progress=None):
             raise RepositoryIndexError(
                 "No supported source files were found. Nothing to index."
             )
@@ -387,11 +478,19 @@ def test_clone_rolls_back_row_when_indexing_fails(
         },
     )
 
-    assert response.status_code == 400
-    assert response.json() == {
-        "success": False,
-        "message": "No supported source files were found. Nothing to index.",
-    }
+    assert response.status_code == 202
+
+    status = client.get(
+        "/repositories/clone/status/adeshmishir/UnindexableProject"
+    )
+
+    assert status.status_code == 200
+
+    status_body = status.json()
+
+    assert status_body["status"] == "error"
+    assert "No supported source files were found" in status_body["error"]
+
     assert len(client.fake_db.repositories) == before
 
 
@@ -417,22 +516,30 @@ def test_clone_returns_clone_error_detail(client, monkeypatch):
         },
     )
 
-    assert response.status_code == 400
-    assert response.json() == {
-        "success": False,
-        "message": (
-            "Repository could not be cloned. Please check the GitHub URL and "
-            "repository access."
-        ),
-        "detail": "repository not found",
-    }
+    assert response.status_code == 202
+
+    status = client.get("/repositories/clone/status/adeshmishir/Secret")
+
+    assert status.status_code == 200
+
+    status_body = status.json()
+
+    assert status_body["status"] == "error"
+    assert status_body["error"] == (
+        "Repository could not be cloned. Please check the GitHub URL and "
+        "repository access. repository not found"
+    )
 
 
 def test_clone_auth_failure_is_sanitized_and_never_leaks_token(
     monkeypatch,
     tmp_path,
 ):
+    from app.api.endpoints.repositories import _run_clone_job
+    from app.services.repository.clone_progress import clone_progress
+
     token = "ghp_secret_api_token"
+    job_id = "adeshmishir/Secret"
 
     monkeypatch.setattr(settings, "GITHUB_TOKEN", token)
     monkeypatch.setattr(git_service, "repositories_dir", tmp_path)
@@ -454,30 +561,20 @@ def test_clone_auth_failure_is_sanitized_and_never_leaks_token(
         def __getattr__(self, name):
             return lambda *args, **kwargs: None
 
-    def override_get_db():
-        yield _NullDB()
+    clone_progress.start(job_id)
 
-    app.dependency_overrides[get_db] = override_get_db
+    _run_clone_job(
+        job_id,
+        "https://github.com/adeshmishir/Secret",
+        session_factory=_NullDB,
+    )
 
-    try:
-        with TestClient(app) as client:
-            response = client.post(
-                "/repositories/clone",
-                json={
-                    "url": "https://github.com/adeshmishir/Secret",
-                },
-            )
-    finally:
-        app.dependency_overrides.clear()
+    job = clone_progress.get(job_id)
 
-    assert response.status_code == 400
-
-    body = response.json()
-
-    assert body["success"] is False
-    assert "authentication is missing or invalid" in body["message"]
-    assert token not in json.dumps(body)
-    assert "x-access-token:***" in body["detail"]
+    assert job is not None
+    assert job.status == "error"
+    assert "authentication is missing or invalid" in job.error
+    assert token not in job.error
 
 
 def test_delete_repository(client):

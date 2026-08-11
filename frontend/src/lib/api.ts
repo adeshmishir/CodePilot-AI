@@ -5,6 +5,7 @@ import type {
   BugDetectionResponse,
   ChatRequest,
   ChatResponse,
+  CloneJobStatus,
   CloneRepositoryRequest,
   CloneRepositoryResponse,
   HealthStatus,
@@ -162,6 +163,13 @@ export class ApiClient {
         body: JSON.stringify(request),
       },
       { timeoutMs: 300_000 },
+    )
+  }
+
+  async getCloneStatus(jobId: string): Promise<CloneJobStatus> {
+    return this.request<CloneJobStatus>(
+      `/repositories/clone/status/${jobId}`,
+      { method: "GET" },
     )
   }
 

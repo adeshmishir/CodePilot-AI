@@ -417,3 +417,63 @@ def test_index_repository_streams_incrementally_per_file(
     assert sorted(parsed_files) == ["app.py", "utils.py"]
     assert len(parsed_files) == 2
     assert result["chunks_created"] >= 2
+
+
+def test_index_repository_reports_progress_per_file(
+    tmp_path,
+    db,
+    clone_root,
+):
+    source = make_source(tmp_path)
+
+    repository = add_repository(
+        db,
+        source.as_posix(),
+        "data/repos/someowner/somename",
+    )
+
+    progress_updates = []
+
+    result = RepositoryService().index_repository(
+        repository_id=repository.id,
+        repository_path=repository.local_path,
+        db=db,
+        progress=lambda done, total: progress_updates.append((done, total)),
+    )
+
+    assert result["files_discovered"] == 2
+    assert progress_updates == [(1, 2), (2, 2)]
+
+
+def test_index_repository_flushes_after_every_file(
+    tmp_path,
+    db,
+    clone_root,
+):
+    source = make_source(tmp_path)
+
+    repository = add_repository(
+        db,
+        source.as_posix(),
+        "data/repos/someowner/somename",
+    )
+
+    flushes = []
+    original_flush = db.flush
+
+    def spy_flush(*args, **kwargs):
+        flushes.append(1)
+        return original_flush(*args, **kwargs)
+
+    db.flush = spy_flush
+
+    RepositoryService().index_repository(
+        repository_id=repository.id,
+        repository_path=repository.local_path,
+        db=db,
+    )
+
+    assert len(flushes) >= 2, (
+        "the session must be flushed after every file so chunk rows are "
+        "never buffered in memory for the whole repository"
+    )

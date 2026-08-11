@@ -175,4 +175,39 @@ describe("ApiClient", () => {
     })
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  it("fetches clone job status", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        job_id: "owner/repo",
+        status: "running",
+        phase: "indexing",
+        files_done: 5,
+        files_total: 10,
+        message: "",
+        error: "",
+        repository_id: null,
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const client = new ApiClient("https://backend.example.com")
+
+    const result = await client.getCloneStatus("owner/repo")
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://backend.example.com/repositories/clone/status/owner/repo",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(result).toEqual({
+      job_id: "owner/repo",
+      status: "running",
+      phase: "indexing",
+      files_done: 5,
+      files_total: 10,
+      message: "",
+      error: "",
+      repository_id: null,
+    })
+  })
 })

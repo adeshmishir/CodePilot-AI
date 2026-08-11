@@ -5,6 +5,7 @@ import type { ReactNode } from "react"
 
 import {
   WorkspaceContext,
+  type CloneProgress,
   type HealthState,
   type WorkspaceContextValue,
 } from "@/context/workspace-context"
@@ -13,6 +14,7 @@ import { formatApiError } from "@/lib/error-format"
 import type { RepositoryListItem } from "@/types/api"
 
 const HEALTH_POLL_MS = 30_000
+const CLONE_POLL_MS = 1_000
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [repositories, setRepositories] = useState<RepositoryListItem[]>([])
@@ -24,6 +26,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [cloning, setCloning] = useState(false)
   const [cloneError, setCloneError] =
     useState<WorkspaceContextValue["cloneError"]>(null)
+  const [cloneProgress, setCloneProgress] = useState<CloneProgress | null>(null)
   const [deletingId, setDeletingId] =
     useState<WorkspaceContextValue["deletingId"]>(null)
   const [deleteError, setDeleteError] =
@@ -126,20 +129,90 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setCloneError(null)
       try {
         const result = await apiClient.cloneRepository({ url })
+        if (result.job_id && result.status === "running") {
+          setCloneProgress({
+            jobId: result.job_id,
+            phase: "cloning",
+            percent: 0,
+            filesDone: 0,
+            filesTotal: 0,
+          })
+          return
+        }
         const updated = await loadRepositories()
         const repository = updated.find((item) => item.id === result.id)
         if (repository) {
           setSelected(repository)
           setSidebarOpen(false)
         }
+        setCloning(false)
       } catch (caught) {
         setCloneError(formatApiError(caught))
-      } finally {
         setCloning(false)
       }
     },
     [loadRepositories],
   )
+
+  useEffect(() => {
+    const jobId = cloneProgress?.jobId
+    if (!jobId) return
+
+    let active = true
+
+    const tick = async () => {
+      if (!active) return
+      try {
+        const status = await apiClient.getCloneStatus(jobId)
+        if (!active) return
+        if (status.status === "done") {
+          setCloneProgress(null)
+          setCloning(false)
+          const updated = await loadRepositories()
+          const repository = updated.find(
+            (item) => item.id === status.repository_id,
+          )
+          if (repository) {
+            setSelected(repository)
+            setSidebarOpen(false)
+          }
+          return
+        }
+        if (status.status === "error") {
+          setCloneProgress(null)
+          setCloning(false)
+          setCloneError({
+            message: status.error || "The clone failed. Please try again.",
+            detail: status.message,
+          })
+          return
+        }
+        setCloneProgress({
+          jobId,
+          phase: status.phase,
+          percent:
+            status.files_total > 0
+              ? Math.min(100, Math.round(
+                  (status.files_done / status.files_total) * 100,
+                ))
+              : 0,
+          filesDone: status.files_done,
+          filesTotal: status.files_total,
+        })
+      } catch {
+        // transient poll failure; keep polling until the job finishes
+      }
+    }
+
+    void tick()
+    const timer = window.setInterval(() => {
+      void tick()
+    }, CLONE_POLL_MS)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [cloneProgress?.jobId, loadRepositories])
 
   const refreshRepositories = useCallback(() => {
     void loadRepositories()
@@ -197,6 +270,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     listError,
     cloning,
     cloneError,
+    cloneProgress,
     deletingId,
     deleteError,
     reindexingId,

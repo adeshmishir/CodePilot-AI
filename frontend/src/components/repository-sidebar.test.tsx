@@ -10,6 +10,13 @@ const mocks = vi.hoisted(() => ({
   reindexRepository: vi.fn(),
   cloneError: null as { message: string; detail?: string } | null,
   deleteError: null as { message: string; detail?: string } | null,
+  cloneProgress: null as {
+    jobId: string
+    phase: string
+    percent: number
+    filesDone: number
+    filesTotal: number
+  } | null,
 }))
 
 vi.mock("@/context/use-workspace", () => ({
@@ -28,6 +35,7 @@ vi.mock("@/context/use-workspace", () => ({
     listError: null,
     cloning: false,
     cloneError: mocks.cloneError,
+    cloneProgress: mocks.cloneProgress,
     deletingId: null,
     deleteError: mocks.deleteError,
     reindexingId: null,
@@ -47,6 +55,7 @@ describe("RepositorySidebar", () => {
   beforeEach(() => {
     mocks.cloneError = null
     mocks.deleteError = null
+    mocks.cloneProgress = null
     mocks.cloneRepository.mockReset()
     mocks.deleteRepository.mockReset()
     mocks.reindexRepository.mockReset()
@@ -123,5 +132,39 @@ describe("RepositorySidebar", () => {
     expect(mocks.reindexRepository).toHaveBeenCalledWith(
       expect.objectContaining({ id: 1 }),
     )
+  })
+
+  it("shows clone progress while a job is running", () => {
+    mocks.cloneProgress = {
+      jobId: "adeshmishir/CoinOracle",
+      phase: "indexing",
+      percent: 42,
+      filesDone: 420,
+      filesTotal: 1000,
+    }
+
+    render(<RepositorySidebar />)
+
+    expect(screen.getByText("Indexing files…")).toBeInTheDocument()
+    expect(screen.getByText("42%")).toBeInTheDocument()
+    expect(screen.getByText(/420/)).toBeInTheDocument()
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuenow",
+      "42",
+    )
+  })
+
+  it("shows the cloning phase while cloning", () => {
+    mocks.cloneProgress = {
+      jobId: "adeshmishir/CoinOracle",
+      phase: "cloning",
+      percent: 0,
+      filesDone: 0,
+      filesTotal: 0,
+    }
+
+    render(<RepositorySidebar />)
+
+    expect(screen.getByText("Cloning repository…")).toBeInTheDocument()
   })
 })

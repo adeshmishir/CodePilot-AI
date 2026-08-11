@@ -28,6 +28,7 @@ export function RepositorySidebar() {
     listError,
     cloning,
     cloneError,
+    cloneProgress,
     deletingId,
     deleteError,
     reindexingId,
@@ -124,6 +125,45 @@ export function RepositorySidebar() {
             </div>
           )}
         </form>
+
+        {cloneProgress && (
+          <div
+            className="mt-3 flex flex-col gap-1.5"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={cloneProgress.percent}
+            aria-label="Clone progress"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 text-xs font-medium">
+                {cloneProgress.phase === "cloning" ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <FolderGit2 className="size-3" />
+                )}
+                {cloneProgress.phase === "cloning"
+                  ? "Cloning repository…"
+                  : "Indexing files…"}
+              </span>
+              <span className="text-muted-foreground text-xs tabular-nums">
+                {cloneProgress.percent}%
+              </span>
+            </div>
+            <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+              <div
+                className="bg-primary h-full rounded-full transition-[width] duration-300"
+                style={{ width: `${cloneProgress.percent}%` }}
+              />
+            </div>
+            {cloneProgress.filesTotal > 0 && (
+              <p className="text-muted-foreground text-[11px] tabular-nums">
+                {cloneProgress.filesDone.toLocaleString()} /{" "}
+                {cloneProgress.filesTotal.toLocaleString()} files
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {repoActionError && (
