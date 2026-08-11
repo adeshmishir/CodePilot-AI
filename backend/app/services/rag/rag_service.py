@@ -1,5 +1,9 @@
 from app.services.llm.groq_service import GroqService
 from app.services.rag.context_builder import ContextBuilder
+from app.services.rag.query_classifier import (
+    QueryClassifier,
+    QueryIntent,
+)
 from app.services.retrieval.retrieval_service import (
     RetrievalService,
     get_retrieval_service,
@@ -20,6 +24,12 @@ SYSTEM_PROMPT = (
     "Explain the answer clearly and concisely."
 )
 
+GENERAL_SYSTEM_PROMPT = (
+    "You are CodePilot, an AI software engineering assistant.\n\n"
+    "Answer the user's question directly and concisely.\n"
+    "If they ask for code, provide a clear, working example."
+)
+
 
 class RAGService:
     """Orchestrate retrieval, context construction, and LLM generation."""
@@ -29,10 +39,12 @@ class RAGService:
         retrieval_service: RetrievalService,
         context_builder: ContextBuilder,
         groq_service: GroqService,
+        query_classifier: QueryClassifier | None = None,
     ):
         self.retrieval_service = retrieval_service
         self.context_builder = context_builder
         self.groq_service = groq_service
+        self.query_classifier = query_classifier or QueryClassifier()
 
     def answer(
         self,
@@ -40,6 +52,11 @@ class RAGService:
         repository_id: int,
         limit: int = 5,
     ) -> dict:
+        intent = self.query_classifier.classify(query)
+
+        if intent == QueryIntent.GENERAL:
+            return self._general_answer(query)
+
         results = self.retrieval_service.search(
             query=query,
             repository_id=repository_id,
@@ -72,6 +89,17 @@ class RAGService:
         return {
             "answer": answer,
             "sources": sources,
+        }
+
+    def _general_answer(self, query: str) -> dict:
+        answer = self.groq_service.generate(
+            system_prompt=GENERAL_SYSTEM_PROMPT,
+            user_prompt=query,
+        )
+
+        return {
+            "answer": answer,
+            "sources": [],
         }
 
 

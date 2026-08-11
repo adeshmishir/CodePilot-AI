@@ -28,13 +28,9 @@ def health_check(response: Response):
         checks["vector_store"] = True
     else:
         try:
-            from qdrant_client import QdrantClient
+            from app.services.vector.vector_store import get_vector_store
 
-            client = QdrantClient(
-                url=settings.QDRANT_URL,
-                api_key=settings.QDRANT_API_KEY or None,
-            )
-            client.get_collections()
+            get_vector_store().health_check()
             checks["vector_store"] = True
         except Exception:
             pass

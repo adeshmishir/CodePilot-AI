@@ -9,17 +9,50 @@ VECTOR_SIZE = 384
 COLLECTION_NAME = "code_chunks"
 
 
+_vector_store: "VectorStore | None" = None
+
+
+def get_vector_store() -> "VectorStore":
+    """Return the shared VectorStore instance.
+
+    Local Qdrant storage can only be opened by one QdrantClient per
+    process, so every component must reuse a single instance instead of
+    constructing new ones per request.
+    """
+    global _vector_store
+
+    if _vector_store is None:
+        _vector_store = VectorStore()
+
+    return _vector_store
+
+
 class VectorStore:
     """Handle vector storage and retrieval using Qdrant."""
 
     def __init__(self):
-        if settings.QDRANT_URL.startswith(("http://", "https://")):
+        url = (settings.QDRANT_URL or "").strip()
+
+        if url.startswith(("http://", "https://")):
             self.client = QdrantClient(
-                url=settings.QDRANT_URL,
+                url=url,
                 api_key=settings.QDRANT_API_KEY or None,
             )
-        else:
-            self.client = QdrantClient(path=settings.QDRANT_URL or ":memory:")
+            return
+
+        if not url or url == ":memory:":
+            if not settings.DEBUG:
+                raise RuntimeError(
+                    "QDRANT_URL is not configured to a persistent Qdrant "
+                    "instance. In-memory storage is only allowed when "
+                    "DEBUG=True; refusing to fall back to :memory: in "
+                    "production."
+                )
+
+            self.client = QdrantClient(path=":memory:")
+            return
+
+        self.client = QdrantClient(path=url)
 
     def health_check(self) -> bool:
         """Check whether the Qdrant client is reachable."""

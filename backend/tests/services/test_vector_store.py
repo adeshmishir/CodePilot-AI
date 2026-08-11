@@ -1,5 +1,7 @@
 from qdrant_client.models import PointStruct
 
+import pytest
+
 from app.services.vector.vector_store import (
     COLLECTION_NAME,
     VECTOR_SIZE,
@@ -26,6 +28,64 @@ def test_create_collection(tmp_path, monkeypatch):
     }
 
     assert COLLECTION_NAME in names
+    assert store.health_check() is True
+
+
+def test_refuses_inmemory_when_debug_disabled(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.DEBUG",
+        False,
+    )
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.QDRANT_URL",
+        ":memory:",
+    )
+
+    with pytest.raises(RuntimeError):
+        VectorStore()
+
+
+def test_refuses_empty_url_when_debug_disabled(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.DEBUG",
+        False,
+    )
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.QDRANT_URL",
+        "",
+    )
+
+    with pytest.raises(RuntimeError):
+        VectorStore()
+
+
+def test_allows_inmemory_when_debug_enabled(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.DEBUG",
+        True,
+    )
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.QDRANT_URL",
+        ":memory:",
+    )
+
+    store = VectorStore()
+
+    assert store.health_check() is True
+
+
+def test_disk_path_allowed_when_debug_disabled(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.DEBUG",
+        False,
+    )
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.QDRANT_URL",
+        str(tmp_path),
+    )
+
+    store = VectorStore()
+
     assert store.health_check() is True
 
 

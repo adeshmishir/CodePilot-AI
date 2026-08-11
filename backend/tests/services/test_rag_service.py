@@ -142,3 +142,47 @@ def test_answer_uses_context_builder_output():
     assert groq.calls[0]["user_prompt"].endswith(
         "--- FILE: src/auth/service.js ---\n..."
     )
+
+
+def test_general_question_skips_retrieval():
+    service, retrieval, context, groq = make_service()
+
+    result = service.answer(
+        query="hello",
+        repository_id=1,
+        limit=5,
+    )
+
+    assert retrieval.calls == []
+    assert context.calls == []
+    assert result["sources"] == []
+    assert result["answer"] == (
+        "Authentication is handled in src/auth/service.js"
+    )
+
+
+def test_general_code_request_skips_retrieval():
+    service, retrieval, _, groq = make_service()
+
+    result = service.answer(
+        query="give me a C++ sum function",
+        repository_id=1,
+        limit=5,
+    )
+
+    assert retrieval.calls == []
+    assert result["sources"] == []
+    assert groq.calls[0]["user_prompt"] == "give me a C++ sum function"
+
+
+def test_identity_question_skips_retrieval():
+    service, retrieval, _, _ = make_service()
+
+    result = service.answer(
+        query="who are you?",
+        repository_id=1,
+        limit=5,
+    )
+
+    assert retrieval.calls == []
+    assert result["sources"] == []

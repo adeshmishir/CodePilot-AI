@@ -10,36 +10,9 @@ def client():
         yield test_client
 
 
-def test_health_passes_qdrant_api_key_when_configured(
-    client,
-    monkeypatch,
-):
+@pytest.fixture
+def fake_engine(monkeypatch):
     import app.api.endpoints.health as health_module
-
-    monkeypatch.setattr(
-        health_module.settings,
-        "QDRANT_URL",
-        "https://qdrant.example.invalid",
-    )
-    monkeypatch.setattr(
-        health_module.settings,
-        "QDRANT_API_KEY",
-        "secret-key",
-    )
-
-    captured = {}
-
-    class FakeCollections:
-        def __init__(self, client):
-            pass
-
-    class FakeQdrantClient:
-        def __init__(self, url, api_key=None):
-            captured["url"] = url
-            captured["api_key"] = api_key
-
-        def get_collections(self):
-            return FakeCollections(self)
 
     class FakeConnection:
         def __enter__(self):
@@ -56,21 +29,40 @@ def test_health_passes_qdrant_api_key_when_configured(
             return FakeConnection()
 
     monkeypatch.setattr(health_module, "engine", FakeEngine())
+
+
+def test_health_passes_when_shared_vector_store_healthy(
+    client,
+    monkeypatch,
+    fake_engine,
+):
+    import app.api.endpoints.health as health_module
+
     monkeypatch.setattr(
-        "qdrant_client.QdrantClient",
-        FakeQdrantClient,
+        health_module.settings,
+        "QDRANT_URL",
+        "https://qdrant.example.invalid",
+    )
+
+    class FakeStore:
+        def health_check(self):
+            return True
+
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.get_vector_store",
+        lambda: FakeStore(),
     )
 
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert captured["url"] == "https://qdrant.example.invalid"
-    assert captured["api_key"] == "secret-key"
+    assert response.json()["checks"]["vector_store"] is True
 
 
 def test_health_treats_qdrant_failure_as_unhealthy(
     client,
     monkeypatch,
+    fake_engine,
 ):
     import app.api.endpoints.health as health_module
 
@@ -79,37 +71,14 @@ def test_health_treats_qdrant_failure_as_unhealthy(
         "QDRANT_URL",
         "https://qdrant.example.invalid",
     )
-    monkeypatch.setattr(
-        health_module.settings,
-        "QDRANT_API_KEY",
-        "",
-    )
 
-    class FakeQdrantClient:
-        def __init__(self, url, api_key=None):
-            pass
-
-        def get_collections(self):
+    class FakeStore:
+        def health_check(self):
             raise RuntimeError("connection refused")
 
-    class FakeConnection:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def execute(self, *args, **kwargs):
-            return None
-
-    class FakeEngine:
-        def connect(self):
-            return FakeConnection()
-
-    monkeypatch.setattr(health_module, "engine", FakeEngine())
     monkeypatch.setattr(
-        "qdrant_client.QdrantClient",
-        FakeQdrantClient,
+        "app.services.vector.vector_store.get_vector_store",
+        lambda: FakeStore(),
     )
 
     response = client.get("/health")

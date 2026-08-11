@@ -6,6 +6,7 @@ from app.main import app
 from app.models.repository import RepositoryModel
 from app.services.github.git_service import git_service
 from app.services.repository.repository_service import repository_service
+from app.core.exceptions import RepositoryIndexError
 
 
 class FakeQuery:
@@ -55,6 +56,10 @@ class FakeDB:
     def add(self, instance):
         self.added = instance
         self.repositories.append(instance)
+
+    def delete(self, instance):
+        if instance in self.repositories:
+            self.repositories.remove(instance)
 
     def commit(self):
         pass
@@ -251,3 +256,61 @@ def test_reindex_missing_repository_returns_404(client):
 
     assert response.status_code == 404
     assert client.fake_indexer.calls == []
+
+
+def test_reindex_returns_error_when_indexing_fails(
+    client,
+    monkeypatch,
+):
+    class FailingRepositoryService:
+        def index_repository(self, repository_id, repository_path, db):
+            raise RepositoryIndexError(
+                "No supported source files were found. Nothing to index."
+            )
+
+    monkeypatch.setattr(
+        repository_service.__class__,
+        "index_repository",
+        FailingRepositoryService().index_repository,
+    )
+
+    response = client.post("/repositories/1/reindex")
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "success": False,
+        "message": "No supported source files were found. Nothing to index.",
+    }
+
+
+def test_clone_rolls_back_row_when_indexing_fails(
+    client,
+    monkeypatch,
+):
+    before = len(client.fake_db.repositories)
+
+    class FailingRepositoryService:
+        def index_repository(self, repository_id, repository_path, db):
+            raise RepositoryIndexError(
+                "No supported source files were found. Nothing to index."
+            )
+
+    monkeypatch.setattr(
+        repository_service.__class__,
+        "index_repository",
+        FailingRepositoryService().index_repository,
+    )
+
+    response = client.post(
+        "/repositories/clone",
+        json={
+            "url": "https://github.com/adeshmishir/UnindexableProject",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "success": False,
+        "message": "No supported source files were found. Nothing to index.",
+    }
+    assert len(client.fake_db.repositories) == before

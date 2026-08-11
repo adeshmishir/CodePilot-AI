@@ -136,6 +136,17 @@ export class ApiClient {
     })
   }
 
+  async reindexRepository(
+    repositoryId: number,
+  ): Promise<CloneRepositoryResponse> {
+    return this.request<CloneRepositoryResponse>(
+      `/repositories/${repositoryId}/reindex`,
+      {
+        method: "POST",
+      },
+    )
+  }
+
   async search(
     repositoryId: number,
     request: SearchRequest,

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import RepositoryIndexError
 from app.database.session import get_db
 from app.models.repository import RepositoryModel
 from app.services.github.git_service import git_service
@@ -78,11 +79,16 @@ def clone_repository(
         db.commit()
         db.refresh(repository)
 
-        repository_service.index_repository(
-            repository_id=repository.id,
-            repository_path=repository.local_path,
-            db=db
-        )
+        try:
+            repository_service.index_repository(
+                repository_id=repository.id,
+                repository_path=repository.local_path,
+                db=db
+            )
+        except RepositoryIndexError:
+            db.delete(repository)
+            db.commit()
+            raise
 
     return {
         "success": result["success"],

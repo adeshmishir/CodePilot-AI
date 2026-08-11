@@ -1,3 +1,4 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +30,19 @@ class Settings(BaseSettings):
         env_file=".env",
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def validate_persistent_vector_store(self):
+        in_memory = not self.QDRANT_URL.strip() or self.QDRANT_URL.strip() == ":memory:"
+
+        if not self.DEBUG and in_memory:
+            raise ValueError(
+                "QDRANT_URL must point to a persistent Qdrant instance "
+                "when DEBUG=False. Refusing to fall back to an in-memory "
+                "vector store in production."
+            )
+
+        return self
 
 
 settings = Settings()
