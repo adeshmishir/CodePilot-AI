@@ -80,50 +80,68 @@ export class ApiClient {
     options?: { timeoutMs?: number },
   ): Promise<T> {
     const timeoutMs = options?.timeoutMs ?? 60_000
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const maxAttempts = 2
+    const retryDelayMs = 1_000
 
-    try {
-      const response = await fetch(`${this.base}${path}`, {
-        ...init,
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          ...init?.headers,
-        },
-      })
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
 
-      if (!response.ok) {
-        let message = `Request failed with status ${response.status}`
-        let detail: string | undefined
-        try {
-          const body = (await response.json()) as {
-            detail?: unknown
-            message?: string
-          }
-          if (typeof body.message === "string") {
-            message = body.message
-          } else if (typeof body.detail === "string") {
-            message = body.detail
-          }
-          if (typeof body.detail === "string") {
-            detail = body.detail
-          }
-        } catch {
-          // fall back to the status-based message
+      let response: Response
+
+      try {
+        response = await fetch(`${this.base}${path}`, {
+          ...init,
+          signal: controller.signal,
+          headers: {
+            "Content-Type": "application/json",
+            ...init?.headers,
+          },
+        })
+      } catch (caught) {
+        if (controller.signal.aborted) {
+          throw new TimeoutError(timeoutMs)
         }
-        throw new ApiClientError(message, response.status, detail)
+        throw caught
+      } finally {
+        clearTimeout(timer)
       }
 
-      return response.json() as Promise<T>
-    } catch (caught) {
-      if (controller.signal.aborted) {
-        throw new TimeoutError(timeoutMs)
+      if (response.ok) {
+        return response.json() as Promise<T>
       }
-      throw caught
-    } finally {
-      clearTimeout(timer)
+
+      let message = `Request failed with status ${response.status}`
+      let detail: string | undefined
+      try {
+        const body = (await response.json()) as {
+          detail?: unknown
+          message?: string
+        }
+        if (typeof body.message === "string") {
+          message = body.message
+        } else if (typeof body.detail === "string") {
+          message = body.detail
+        }
+        if (typeof body.detail === "string") {
+          detail = body.detail
+        }
+      } catch {
+        // fall back to the status-based message
+      }
+
+      if (
+        attempt < maxAttempts &&
+        (response.status === 502 || response.status === 503)
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
+        continue
+      }
+
+      throw new ApiClientError(message, response.status, detail)
     }
+
+    throw new ApiClientError(`Request failed with status ${502}`, 502)
   }
 
   async health(): Promise<HealthStatus> {

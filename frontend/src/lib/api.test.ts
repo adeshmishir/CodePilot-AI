@@ -110,4 +110,69 @@ describe("ApiClient", () => {
       expect(caught).toBeInstanceOf(ApiClientError)
     }
   })
+
+  it("retries once on a 502 before succeeding", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ message: "bad gateway" }, 502))
+      .mockResolvedValueOnce(
+        jsonResponse({ repositories: [] }),
+      )
+
+    vi.stubGlobal("fetch", fetchMock)
+
+    const client = new ApiClient("https://backend.example.com")
+
+    const result = await client.listRepositories()
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(result).toEqual({ repositories: [] })
+  })
+
+  it("retries once on a 503 before succeeding", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ message: "unavailable" }, 503))
+      .mockResolvedValueOnce(jsonResponse({ status: "healthy" }))
+
+    vi.stubGlobal("fetch", fetchMock)
+
+    const client = new ApiClient("https://backend.example.com")
+
+    const result = await client.health()
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(result).toEqual({ status: "healthy" })
+  })
+
+  it("throws the 502 error after exhausting retries", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ message: "bad gateway" }, 502))
+
+    vi.stubGlobal("fetch", fetchMock)
+
+    const client = new ApiClient("https://backend.example.com")
+
+    await expect(client.health()).rejects.toMatchObject({
+      status: 502,
+      message: "bad gateway",
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not retry on 500", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ message: "boom" }, 500))
+
+    vi.stubGlobal("fetch", fetchMock)
+
+    const client = new ApiClient("https://backend.example.com")
+
+    await expect(client.health()).rejects.toMatchObject({
+      status: 500,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 })
