@@ -70,21 +70,21 @@ class VectorIndexer:
             },
         )
 
-    def index_chunks(
+    def upsert_chunks(
         self,
-        db: Session,
         repository_id: int,
         chunks: list[CodeChunk | CodeChunkModel],
-    ) -> int:
-        """Upsert vectors for the given chunks, then drop stale points.
+    ) -> tuple[int, set[int]]:
+        """Embed and upsert a single file's chunks in bounded batches.
 
-        Vectors are written in bounded batches to keep peak memory flat
-        during embedding, and stale points for the repository are only
-        removed after all new vectors have been upserted successfully.
+        Chunks are embedded in batches of ``INDEX_BATCH_SIZE`` so peak
+        memory stays flat, and only the resulting point ids are returned.
+        Returns ``(count, point_ids)``.
         """
-        self.vector_store.create_collection()
-
         batch_size = settings.INDEX_BATCH_SIZE
+
+        count = 0
+        point_ids: set[int] = set()
 
         for offset in range(0, len(chunks), batch_size):
             batch = chunks[offset:offset + batch_size]
@@ -102,23 +102,49 @@ class VectorIndexer:
 
             self.vector_store.upsert_embeddings(points)
 
-        existing_ids = self.vector_store.list_repository_point_ids(repository_id)
+            count += len(batch)
+            point_ids.update(
+                point_id(repository_id, chunk) for chunk in batch
+            )
 
-        new_ids = {
-            point_id(repository_id, chunk)
-            for chunk in chunks
-        }
+        return count, point_ids
+
+    def remove_stale_points(
+        self,
+        repository_id: int,
+        new_point_ids: set[int],
+    ) -> None:
+        """Remove Qdrant points for the repository not in new_point_ids."""
+        existing_ids = self.vector_store.list_repository_point_ids(repository_id)
 
         stale_ids = [
             existing_id
             for existing_id in existing_ids
-            if existing_id not in new_ids
+            if existing_id not in new_point_ids
         ]
 
         if stale_ids:
             self.vector_store.delete_points_by_ids(stale_ids)
 
-        return len(chunks)
+    def index_chunks(
+        self,
+        db: Session,
+        repository_id: int,
+        chunks: list[CodeChunk | CodeChunkModel],
+    ) -> int:
+        """Upsert vectors for the given chunks, then drop stale points.
+
+        Vectors are written in bounded batches to keep peak memory flat
+        during embedding, and stale points for the repository are only
+        removed after all new vectors have been upserted successfully.
+        """
+        self.vector_store.create_collection()
+
+        count, new_ids = self.upsert_chunks(repository_id, chunks)
+
+        self.remove_stale_points(repository_id, new_ids)
+
+        return count
 
     def index_repository(
         self,

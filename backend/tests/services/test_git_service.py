@@ -21,6 +21,7 @@ def make_clone_spy(monkeypatch, error=None):
     def fake_clone(url, to_path, **kwargs):
         captured["url"] = url
         captured["env"] = kwargs.get("env")
+        captured["depth"] = kwargs.get("depth")
         if error is not None:
             raise error
 
@@ -386,3 +387,61 @@ def test_redacts_token_value_in_error(tmp_path, monkeypatch):
     )
 
     assert token not in redacted
+
+
+def test_github_clone_uses_shallow_depth(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "GITHUB_TOKEN", "")
+    service = make_service(tmp_path)
+
+    captured = make_clone_spy(monkeypatch)
+
+    service.clone_repository("https://github.com/owner/repo")
+
+    assert captured["depth"] == 1
+    assert captured["env"] == {"GIT_TERMINAL_PROMPT": "0"}
+
+
+def test_github_private_clone_uses_shallow_depth(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "GITHUB_TOKEN", "ghp_secret_token")
+    service = make_service(tmp_path)
+
+    captured = make_clone_spy(monkeypatch)
+
+    service.clone_repository("https://github.com/owner/private-repo")
+
+    assert captured["depth"] == 1
+    assert "x-access-token:" in captured["url"]
+
+
+def test_recover_repository_uses_shallow_depth(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "GITHUB_TOKEN", "ghp_recover_token")
+    service = make_service(tmp_path)
+
+    captured = make_clone_spy(monkeypatch)
+
+    service.recover_repository("https://github.com/owner/broken-repo")
+
+    assert captured["depth"] == 1
+
+
+def test_non_github_clone_is_not_shallow(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "GITHUB_TOKEN", "")
+    service = make_service(tmp_path)
+
+    captured = make_clone_spy(monkeypatch)
+
+    service.clone_repository("https://gitlab.com/owner/repo")
+
+    assert captured["url"] == "https://gitlab.com/owner/repo"
+    assert captured["depth"] is None
+
+
+def test_local_path_clone_is_not_shallow(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "GITHUB_TOKEN", "")
+    service = make_service(tmp_path)
+
+    captured = make_clone_spy(monkeypatch)
+
+    service.clone_repository((tmp_path / "some" / "repo").as_posix())
+
+    assert captured["depth"] is None

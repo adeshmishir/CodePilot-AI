@@ -249,10 +249,17 @@ class GitService:
         )
 
     def _clone_repository(self, url: str, destination: Path) -> None:
+        clone_url = self._build_clone_url(url)
+
+        parsed = urlparse(clone_url)
+        hostname = parsed.hostname.lower() if parsed.hostname else ""
+        is_github = hostname == GITHUB_HOST
+
         try:
             Repo.clone_from(
-                self._build_clone_url(url),
+                clone_url,
                 destination,
+                depth=1 if is_github else None,
                 env={"GIT_TERMINAL_PROMPT": "0"},
             )
         except Exception as error:

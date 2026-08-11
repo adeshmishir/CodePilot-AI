@@ -2,6 +2,8 @@ import os
 import shutil
 import subprocess
 
+from pathlib import Path
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -323,3 +325,95 @@ def test_index_repository_raises_when_no_source_files(
         )
 
     assert "no supported source files" in str(error.value)
+
+
+def test_index_repository_streams_without_accumulating_chunks(
+    tmp_path,
+    db,
+    clone_root,
+    monkeypatch,
+):
+    from app.models.code_chunk import CodeChunkModel
+    from app.services.indexing.repository_indexer import RepositoryIndexer
+
+    source = make_source(tmp_path)
+
+    repository = add_repository(
+        db,
+        source.as_posix(),
+        "data/repos/someowner/somename",
+    )
+
+    original_build_chunks = RepositoryIndexer.build_chunks
+
+    def assert_single_file_at_a_time(self, files):
+        assert len(files) == 1, (
+            "build_chunks must be called one file at a time "
+            "so the whole repository is never held in memory"
+        )
+        return original_build_chunks(self, files)
+
+    monkeypatch.setattr(
+        RepositoryIndexer,
+        "build_chunks",
+        assert_single_file_at_a_time,
+    )
+
+    result = RepositoryService().index_repository(
+        repository_id=repository.id,
+        repository_path=repository.local_path,
+        db=db,
+    )
+
+    assert result["files_discovered"] == 2
+    assert result["chunks_created"] >= 2
+    assert result["vectors_indexed"] == result["chunks_created"]
+
+    rows = (
+        db.query(CodeChunkModel)
+        .filter(CodeChunkModel.repository_id == repository.id)
+        .all()
+    )
+
+    assert len(rows) == result["chunks_created"]
+
+
+def test_index_repository_streams_incrementally_per_file(
+    tmp_path,
+    db,
+    clone_root,
+    monkeypatch,
+):
+    source = make_source(tmp_path)
+
+    repository = add_repository(
+        db,
+        source.as_posix(),
+        "data/repos/someowner/somename",
+    )
+
+    parsed_files = []
+
+    service = RepositoryService()
+
+    original_create_chunks = service.indexer.parser.create_chunks
+
+    def tracking_create_chunks(file_path):
+        parsed_files.append(Path(file_path).name)
+        return original_create_chunks(file_path)
+
+    monkeypatch.setattr(
+        service.indexer.parser,
+        "create_chunks",
+        tracking_create_chunks,
+    )
+
+    result = service.index_repository(
+        repository_id=repository.id,
+        repository_path=repository.local_path,
+        db=db,
+    )
+
+    assert sorted(parsed_files) == ["app.py", "utils.py"]
+    assert len(parsed_files) == 2
+    assert result["chunks_created"] >= 2

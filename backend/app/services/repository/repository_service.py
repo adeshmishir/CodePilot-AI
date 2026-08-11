@@ -77,34 +77,65 @@ class RepositoryService:
                 NO_SUPPORTED_FILES_MESSAGE
             )
 
-        chunks = self.indexer.build_chunks(files)
+        indexer = VectorIndexer()
 
-        if not chunks:
+        indexer.vector_store.create_collection()
+
+        total_chunks = 0
+        total_vectors = 0
+        new_point_ids: set[int] = set()
+        rows_replaced = False
+
+        for file_chunks in self.indexer.iter_file_chunks(files):
+            if not rows_replaced:
+                db.query(CodeChunkModel).filter(
+                    CodeChunkModel.repository_id == repository_id
+                ).delete(synchronize_session=False)
+                rows_replaced = True
+
+            vectors, point_ids = indexer.upsert_chunks(
+                repository_id=repository_id,
+                chunks=file_chunks,
+            )
+
+            db.bulk_insert_mappings(
+                CodeChunkModel,
+                [
+                    {
+                        "repository_id": repository_id,
+                        "file_path": chunk.file_path,
+                        "symbol_name": chunk.symbol_name,
+                        "symbol_type": chunk.symbol_type,
+                        "start_line": chunk.start_line,
+                        "end_line": chunk.end_line,
+                        "content": chunk.content,
+                    }
+                    for chunk in file_chunks
+                ],
+            )
+
+            total_chunks += len(file_chunks)
+            total_vectors += vectors
+            new_point_ids.update(point_ids)
+
+        if total_chunks == 0:
             raise RepositoryIndexError(
                 NO_CHUNKS_MESSAGE.format(repository=repository.name)
             )
 
-        vectors_indexed = VectorIndexer().index_chunks(
-            db=db,
-            repository_id=repository_id,
-            chunks=chunks,
-        )
-
-        if vectors_indexed == 0:
+        if total_vectors == 0:
             raise RepositoryIndexError(
                 NO_VECTORS_MESSAGE.format(repository=repository.name)
             )
 
-        self.indexer.replace_chunks(
-            chunks=chunks,
-            repository_id=repository_id,
-            db=db,
-        )
+        indexer.remove_stale_points(repository_id, new_point_ids)
+
+        db.commit()
 
         return {
             "files_discovered": len(files),
-            "chunks_created": len(chunks),
-            "vectors_indexed": vectors_indexed,
+            "chunks_created": total_chunks,
+            "vectors_indexed": total_vectors,
         }
 
     def count_chunks(self, repository_id: int, db: Session) -> int:

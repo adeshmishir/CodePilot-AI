@@ -28,6 +28,25 @@ class RepositoryIndexer:
 
         return chunks
 
+    def iter_file_chunks(self, files: list[Path]):
+        """Yield chunks one file at a time.
+
+        Callers iterate over this generator so that only a single file's
+        chunks are held in memory at once, instead of accumulating the
+        entire repository's chunks in one list.
+        """
+        for file in files:
+            try:
+                file_chunks = self.build_chunks([file])
+            except Exception as error:
+                print(
+                    f"Failed parsing {file}: {error}"
+                )
+                continue
+
+            if file_chunks:
+                yield file_chunks
+
     def replace_chunks(
         self,
         chunks: list[CodeChunk],
