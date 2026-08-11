@@ -31,3 +31,26 @@ class GroqService:
         )
 
         return response.choices[0].message.content or ""
+
+    def generate_stream(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+    ):
+        """Yield answer text deltas as the model streams them."""
+        stream = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+            stream=True,
+        )
+
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta

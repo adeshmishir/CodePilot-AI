@@ -8,10 +8,14 @@ JOB_TTL_SECONDS = 60 * 60
 MAX_JOBS = 100
 
 
+class CloneCancelledError(Exception):
+    """Raised inside a clone worker when a user cancels the job."""
+
+
 @dataclass
 class CloneJob:
     job_id: str
-    status: str = "running"  # running | done | error
+    status: str = "running"  # running | done | error | cancelled
     phase: str = "cloning"  # cloning | indexing
     files_done: int = 0
     files_total: int = 0
@@ -59,6 +63,22 @@ class CloneProgressStore:
         with self._lock:
             job = self._jobs.get(job_id)
             return job is not None and job.status == "running"
+
+    def is_cancelled(self, job_id: str) -> bool:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            return job is not None and job.status == "cancelled"
+
+    def cancel(self, job_id: str) -> bool:
+        """Request cancellation of a running job. Returns False when there
+        is no running job to cancel."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None or job.status != "running":
+                return False
+            job.status = "cancelled"
+            job.updated_at = time.time()
+            return True
 
     def get_all_ids(self) -> list[str]:
         with self._lock:

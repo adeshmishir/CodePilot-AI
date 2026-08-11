@@ -60,7 +60,11 @@ class VectorStore:
         return True
 
     def create_collection(self) -> None:
-        from qdrant_client.models import PayloadSchemaType
+        from qdrant_client.models import (
+            HnswConfigDiff,
+            PayloadSchemaType,
+            VectorParams,
+        )
 
         collections = self.client.get_collections().collections
         existing_names = {collection.name for collection in collections}
@@ -68,10 +72,16 @@ class VectorStore:
         if COLLECTION_NAME not in existing_names:
             self.client.create_collection(
                 collection_name=COLLECTION_NAME,
-                vectors_config={
-                    "size": VECTOR_SIZE,
-                    "distance": "Cosine",
-                },
+                vectors_config=VectorParams(
+                    size=VECTOR_SIZE,
+                    distance="Cosine",
+                    on_disk=True,
+                ),
+                # Keep the vector index and payload on disk so peak memory
+                # does not grow with the number of indexed chunks, which is
+                # what OOMs the small free-tier instance on larger repos.
+                hnsw_config=HnswConfigDiff(on_disk=True),
+                on_disk_payload=True,
             )
 
         try:

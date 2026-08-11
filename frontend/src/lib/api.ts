@@ -5,6 +5,7 @@ import type {
   BugDetectionResponse,
   ChatRequest,
   ChatResponse,
+  ChatSource,
   CloneJobStatus,
   CloneRepositoryRequest,
   CloneRepositoryResponse,
@@ -61,6 +62,27 @@ export class TimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(`Request timed out after ${timeoutMs}ms`)
     this.name = "TimeoutError"
+  }
+}
+
+export interface StreamChatCallbacks {
+  onDelta?: (text: string) => void
+  onSources?: (sources: ChatSource[]) => void
+  onDone?: () => void
+}
+
+function parseSseEvent(raw: string): Record<string, unknown> | null {
+  const dataLines: string[] = []
+  for (const line of raw.split("\n")) {
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart())
+    }
+  }
+  if (dataLines.length === 0) return null
+  try {
+    return JSON.parse(dataLines.join("\n")) as Record<string, unknown>
+  } catch {
+    return null
   }
 }
 
@@ -219,6 +241,110 @@ export class ApiClient {
         method: "POST",
         body: JSON.stringify(request),
       },
+    )
+  }
+
+  async streamChat(
+    repositoryId: number,
+    request: ChatRequest,
+    callbacks: StreamChatCallbacks = {},
+    options?: { timeoutMs?: number },
+  ): Promise<ChatResponse> {
+    const timeoutMs = options?.timeoutMs ?? 300_000
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+    try {
+      const response = await fetch(
+        `${this.base}/api/repositories/${repositoryId}/chat/stream`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+          signal: controller.signal,
+        },
+      )
+
+      if (!response.ok || !response.body) {
+        throw await this.readErrorBody(response)
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let answer = ""
+      let sources: ChatSource[] = []
+
+      for (;;) {
+        let chunk: ReadableStreamReadResult<Uint8Array>
+        try {
+          chunk = await reader.read()
+        } catch (caught) {
+          if (controller.signal.aborted) throw new TimeoutError(timeoutMs)
+          throw caught
+        }
+        if (chunk.done) break
+        buffer += decoder.decode(chunk.value, { stream: true })
+        const events = buffer.split("\n\n")
+        buffer = events.pop() ?? ""
+        for (const raw of events) {
+          const payload = parseSseEvent(raw)
+          if (!payload) continue
+          if (payload.type === "sources" && Array.isArray(payload.sources)) {
+            sources = payload.sources as ChatSource[]
+            callbacks.onSources?.(sources)
+          } else if (
+            payload.type === "delta" &&
+            typeof payload.text === "string"
+          ) {
+            answer += payload.text
+            callbacks.onDelta?.(payload.text)
+          } else if (payload.type === "error") {
+            throw new ApiClientError(
+              typeof payload.detail === "string"
+                ? payload.detail
+                : "Unable to generate an answer.",
+              500,
+            )
+          }
+        }
+      }
+
+      callbacks.onDone?.()
+      return { answer, sources }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  private async readErrorBody(response: Response): Promise<ApiClientError> {
+    let message = `Request failed with status ${response.status}`
+    let detail: string | undefined
+    try {
+      const body = (await response.json()) as {
+        detail?: unknown
+        message?: string
+      }
+      if (typeof body.message === "string") {
+        message = body.message
+      } else if (typeof body.detail === "string") {
+        message = body.detail
+      }
+      if (typeof body.detail === "string") {
+        detail = body.detail
+      }
+    } catch {
+      // fall back to the status-based message
+    }
+    return new ApiClientError(message, response.status, detail)
+  }
+
+  async cancelCloneJob(
+    jobId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(
+      `/repositories/clone/cancel/${jobId}`,
+      { method: "POST" },
     )
   }
 

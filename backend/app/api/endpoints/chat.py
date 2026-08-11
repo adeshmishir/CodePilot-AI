@@ -1,6 +1,8 @@
+import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -67,4 +69,56 @@ def chat_repository(
             ChatSource(**source)
             for source in result["sources"]
         ],
+    )
+
+
+@router.post("/chat/stream")
+def chat_repository_stream(
+    repository_id: int,
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    rag: RAGService = Depends(get_rag_service),
+):
+    repository = (
+        db.query(RepositoryModel)
+        .filter(RepositoryModel.id == repository_id)
+        .first()
+    )
+
+    if repository is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Repository not found"
+        )
+
+    def event_stream():
+        try:
+            for event in rag.answer_stream(
+                query=request.query,
+                repository_id=repository_id,
+                limit=request.limit,
+            ):
+                yield f"data: {json.dumps(event, default=str)}\n\n"
+        except Exception as error:
+            logger.error(
+                "Chat stream failed for repository %s: %s",
+                repository_id,
+                error,
+            )
+            yield (
+                "data: "
+                + json.dumps(
+                    {
+                        "type": "error",
+                        "detail": (
+                            "Unable to generate an answer at this time."
+                        ),
+                    }
+                )
+                + "\n\n"
+            )
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
     )

@@ -53,10 +53,13 @@ class RepositoryService:
     ):
         """Index a repository, reporting progress through ``progress(done, total)``.
 
-        Rows are flushed to the database after every file so the ORM session
-        never buffers the whole repository's chunk content in memory, which
-        is what pushed the free-tier instance over its 512 MB limit on
-        larger repositories.
+        Every file is committed to the database in its own transaction so
+        progress is pushed to the database progressively instead of being
+        buffered in memory and committed only at the end. This bounds peak
+        memory to a single file at a time, which is what pushed the
+        free-tier instance over its 512 MB limit on larger repositories.
+        A file that fails to index is skipped so one bad file cannot stop
+        the whole repository from being indexed.
         """
         from app.services.indexing.vector_indexer import VectorIndexer
         from app.services.parser.repository_parser import repository_parser
@@ -97,45 +100,54 @@ class RepositoryService:
         total_files = len(files)
 
         for file_chunks in self.indexer.iter_file_chunks(files):
-            if not rows_replaced:
-                db.query(CodeChunkModel).filter(
-                    CodeChunkModel.repository_id == repository_id
-                ).delete(synchronize_session=False)
-                rows_replaced = True
+            try:
+                if not rows_replaced:
+                    db.query(CodeChunkModel).filter(
+                        CodeChunkModel.repository_id == repository_id
+                    ).delete(synchronize_session=False)
+                    rows_replaced = True
 
-            vectors, point_ids = indexer.upsert_chunks(
-                repository_id=repository_id,
-                chunks=file_chunks,
-            )
+                vectors, point_ids = indexer.upsert_chunks(
+                    repository_id=repository_id,
+                    chunks=file_chunks,
+                )
 
-            db.bulk_insert_mappings(
-                CodeChunkModel,
-                [
-                    {
-                        "repository_id": repository_id,
-                        "file_path": chunk.file_path,
-                        "symbol_name": chunk.symbol_name,
-                        "symbol_type": chunk.symbol_type,
-                        "start_line": chunk.start_line,
-                        "end_line": chunk.end_line,
-                        "content": chunk.content,
-                    }
-                    for chunk in file_chunks
-                ],
-            )
+                db.bulk_insert_mappings(
+                    CodeChunkModel,
+                    [
+                        {
+                            "repository_id": repository_id,
+                            "file_path": chunk.file_path,
+                            "symbol_name": chunk.symbol_name,
+                            "symbol_type": chunk.symbol_type,
+                            "start_line": chunk.start_line,
+                            "end_line": chunk.end_line,
+                            "content": chunk.content,
+                        }
+                        for chunk in file_chunks
+                    ],
+                )
 
-            # Push the buffered rows to the database inside the same
-            # transaction so memory stays bounded by one file at a time.
-            db.flush()
+                # Bound session buffering and persist each file's rows in
+                # its own transaction so a crash mid-index does not lose
+                # the work already done.
+                db.flush()
+                db.commit()
 
-            total_chunks += len(file_chunks)
-            total_vectors += vectors
-            new_point_ids.update(point_ids)
+                total_chunks += len(file_chunks)
+                total_vectors += vectors
+                new_point_ids.update(point_ids)
 
-            processed_files += 1
+                processed_files += 1
 
-            if progress is not None:
-                progress(processed_files, total_files)
+                if progress is not None:
+                    progress(processed_files, total_files)
+            except Exception as error:
+                db.rollback()
+                print(
+                    f"Failed indexing a file for repository "
+                    f"{repository_id}: {error}"
+                )
 
         if total_chunks == 0:
             raise RepositoryIndexError(

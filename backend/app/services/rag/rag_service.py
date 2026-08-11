@@ -91,6 +91,65 @@ class RAGService:
             "sources": sources,
         }
 
+    def answer_stream(
+        self,
+        query: str,
+        repository_id: int,
+        limit: int = 5,
+    ):
+        """Yield SSE-style events for a streaming chat response.
+
+        Events:
+          {"type": "sources", "sources": [...]}
+          {"type": "delta", "text": str}
+          {"type": "done", "message": str}
+        """
+        intent = self.query_classifier.classify(query)
+
+        if intent == QueryIntent.GENERAL:
+            yield {"type": "sources", "sources": []}
+            for delta in self.groq_service.generate_stream(
+                system_prompt=GENERAL_SYSTEM_PROMPT,
+                user_prompt=query,
+            ):
+                yield {"type": "delta", "text": delta}
+            yield {"type": "done", "message": ""}
+            return
+
+        results = self.retrieval_service.search(
+            query=query,
+            repository_id=repository_id,
+            limit=limit,
+        )
+
+        context = self.context_builder.build(results)
+
+        sources = [
+            {
+                "file_path": result.get("file_path"),
+                "symbol_name": result.get("symbol_name"),
+                "start_line": result.get("start_line"),
+                "end_line": result.get("end_line"),
+                "score": result.get("score"),
+            }
+            for result in results
+        ]
+
+        yield {"type": "sources", "sources": sources}
+
+        user_prompt = (
+            f"Developer Question:\n{query}\n\n"
+            f"Repository Context:\n\n{context}"
+        )
+
+        for delta in self.groq_service.generate_stream(
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+        ):
+            yield {"type": "delta", "text": delta}
+
+        yield {"type": "done", "message": ""}
+
     def _general_answer(self, query: str) -> dict:
         answer = self.groq_service.generate(
             system_prompt=GENERAL_SYSTEM_PROMPT,

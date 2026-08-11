@@ -1,12 +1,27 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { ApiClient, ApiClientError } from "@/lib/api"
+import type { ChatSource } from "@/types/api"
 
 function jsonResponse(body: unknown, status = 200) {
   return {
     ok: status >= 200 && status < 300,
     status,
     json: () => Promise.resolve(body),
+  } as Response
+}
+
+function sseResponse(body: string, status = 200) {
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(body))
+      controller.close()
+    },
+  })
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    body: stream,
   } as Response
 }
 
@@ -208,6 +223,87 @@ describe("ApiClient", () => {
       message: "",
       error: "",
       repository_id: null,
+    })
+  })
+
+  it("cancels a running clone job", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ success: true, message: "Clone cancelled." }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const client = new ApiClient("https://backend.example.com")
+
+    const result = await client.cancelCloneJob("owner/repo")
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://backend.example.com/repositories/clone/cancel/owner/repo",
+      expect.objectContaining({ method: "POST" }),
+    )
+    expect(result).toEqual({
+      success: true,
+      message: "Clone cancelled.",
+    })
+  })
+
+  it("streams chat deltas and sources from the SSE endpoint", async () => {
+    const events = [
+      'data: {"type":"sources","sources":[{"file_path":"src/a.js","symbol_name":"foo","start_line":1,"end_line":2,"score":0.9}]}',
+      'data: {"type":"delta","text":"Hello "}',
+      'data: {"type":"delta","text":"world."}',
+      'data: {"type":"done","message":""}',
+    ].join("\n\n") + "\n\n"
+    const fetchMock = vi.fn().mockResolvedValue(sseResponse(events))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const deltas: string[] = []
+    let sources: ChatSource[] = []
+    const client = new ApiClient("https://backend.example.com")
+
+    const result = await client.streamChat(
+      1,
+      { query: "hi", limit: 5 },
+      {
+        onDelta: (text) => deltas.push(text),
+        onSources: (next) => {
+          sources = next
+        },
+      },
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://backend.example.com/api/repositories/1/chat/stream",
+      expect.objectContaining({ method: "POST" }),
+    )
+    expect(deltas).toEqual(["Hello ", "world."])
+    expect(sources).toEqual([
+      {
+        file_path: "src/a.js",
+        symbol_name: "foo",
+        start_line: 1,
+        end_line: 2,
+        score: 0.9,
+      },
+    ])
+    expect(result).toEqual({
+      answer: "Hello world.",
+      sources,
+    })
+  })
+
+  it("throws when the streamed chat endpoint returns an error event", async () => {
+    const events =
+      'data: {"type":"error","detail":"Unable to generate an answer at this time."}\n\n'
+    const fetchMock = vi.fn().mockResolvedValue(sseResponse(events))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const client = new ApiClient("https://backend.example.com")
+
+    await expect(
+      client.streamChat(1, { query: "hi", limit: 5 }),
+    ).rejects.toMatchObject({
+      status: 500,
+      message: "Unable to generate an answer at this time.",
     })
   })
 })

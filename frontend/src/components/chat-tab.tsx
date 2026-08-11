@@ -2,18 +2,24 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 
-import { ArrowDown, Bot, FileText, Trash2 } from "lucide-react"
+import {
+  ArrowDown,
+  Bot,
+  ChevronRight,
+  FileText,
+  Trash2,
+} from "lucide-react"
 
 import { ChatComposer } from "@/components/chat-composer"
 import { CopyButton } from "@/components/copy-button"
 import { ErrorAlert } from "@/components/error-alert"
 import { Markdown } from "@/components/markdown"
-import { TypingIndicator } from "@/components/loading"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useWorkspace } from "@/context/use-workspace"
-import { useAsyncSubmit } from "@/hooks/use-async-submit"
+import { formatApiError, type FormattedError } from "@/lib/error-format"
 import { apiClient } from "@/lib/api"
+import { cn } from "@/lib/utils"
 import type { ChatSource } from "@/types/api"
 
 interface ChatMessage {
@@ -21,6 +27,7 @@ interface ChatMessage {
   role: "user" | "assistant"
   content: string
   sources?: ChatSource[]
+  streaming?: boolean
 }
 
 interface ChatTabProps {
@@ -61,24 +68,23 @@ export function ChatTab({ repositoryId }: ChatTabProps) {
   const sendingRef = useRef(false)
   const pendingScrollBottomRef = useRef(false)
   const [showJump, setShowJump] = useState(false)
+  const [streaming, setStreaming] = useState(false)
+  const [chatError, setChatError] = useState<FormattedError | null>(null)
   const previousRepoRef = useRef<number | null>(null)
-
-  const { loading, error, run, reset } = useAsyncSubmit(
-    (q: string) => apiClient.chat(repositoryId, { query: q, limit: 5 }),
-  )
 
   useEffect(() => {
     if (
       previousRepoRef.current !== null &&
       previousRepoRef.current !== repositoryId
     ) {
-      reset()
       sendingRef.current = false
+      setStreaming(false)
+      setChatError(null)
       setShowJump(false)
       nearBottomRef.current = true
     }
     previousRepoRef.current = repositoryId
-  }, [repositoryId, reset])
+  }, [repositoryId])
 
   const messages = useMemo(
     () => histories[repositoryId] ?? [],
@@ -109,7 +115,7 @@ export function ChatTab({ repositoryId }: ChatTabProps) {
     const el = scrollRef.current
     if (!el || !nearBottomRef.current) return
     el.scrollTop = el.scrollHeight
-  }, [messages, loading])
+  }, [messages, streaming])
 
   useEffect(() => {
     if (messages.length === 0) return
@@ -155,11 +161,69 @@ export function ChatTab({ repositoryId }: ChatTabProps) {
     if (near) setShowJump(false)
   }
 
+  const submit = async (text: string) => {
+    sendingRef.current = true
+    setStreaming(true)
+    setChatError(null)
+
+    const assistantId = ++idRef.current
+
+    updateMessages((current) => [
+      ...current,
+      {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        sources: [],
+        streaming: true,
+      },
+    ])
+
+    try {
+      await apiClient.streamChat(
+        repositoryId,
+        { query: text, limit: 5 },
+        {
+          onDelta: (delta) => {
+            updateMessages((current) =>
+              current.map((message) =>
+                message.id === assistantId
+                  ? { ...message, content: message.content + delta }
+                  : message,
+              ),
+            )
+          },
+          onSources: (sources) => {
+            updateMessages((current) =>
+              current.map((message) =>
+                message.id === assistantId ? { ...message, sources } : message,
+              ),
+            )
+          },
+        },
+      )
+    } catch (caught) {
+      updateMessages((current) =>
+        current.filter((message) => message.id !== assistantId),
+      )
+      setChatError(formatApiError(caught))
+    } finally {
+      updateMessages((current) =>
+        current.map((message) =>
+          message.id === assistantId
+            ? { ...message, streaming: false }
+            : message,
+        ),
+      )
+      sendingRef.current = false
+      setStreaming(false)
+    }
+  }
+
   const handleSend = () => {
     const text = query.trim()
-    if (!text || loading || sendingRef.current) return
+    if (!text || streaming || sendingRef.current) return
 
-    sendingRef.current = true
     updateMessages((current) => [
       ...current,
       { id: ++idRef.current, role: "user", content: text },
@@ -168,28 +232,13 @@ export function ChatTab({ repositoryId }: ChatTabProps) {
     nearBottomRef.current = true
     pendingScrollBottomRef.current = true
 
-    void run(text).then((result) => {
-      sendingRef.current = false
-      if (!result) return
-      updateMessages((current) => [
-        ...current,
-        {
-          id: ++idRef.current,
-          role: "assistant",
-          content: result.answer,
-          sources: result.sources,
-        },
-      ])
-    })
+    void submit(text)
   }
 
   const handleRetry = () => {
     const lastUser = [...messages].reverse().find((m) => m.role === "user")
-    if (!lastUser || sendingRef.current) return
-    sendingRef.current = true
-    void run(lastUser.content).then(() => {
-      sendingRef.current = false
-    })
+    if (!lastUser || streaming || sendingRef.current) return
+    void submit(lastUser.content)
   }
 
   const handleClear = () => {
@@ -231,7 +280,7 @@ export function ChatTab({ repositoryId }: ChatTabProps) {
           className="h-full overflow-y-auto px-4 py-4 sm:px-6"
         >
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-            {messages.length === 0 && !loading && (
+            {messages.length === 0 && !streaming && (
               <EmptyChatState />
             )}
 
@@ -245,17 +294,6 @@ export function ChatTab({ repositoryId }: ChatTabProps) {
                 <ChatMessageView message={message} />
               </div>
             ))}
-
-            {loading && (
-              <div className="flex items-start gap-3">
-                <span className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-full">
-                  <Bot className="size-4" />
-                </span>
-                <div className="bg-card rounded-xl border px-4 py-3">
-                  <TypingIndicator />
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -272,9 +310,9 @@ export function ChatTab({ repositoryId }: ChatTabProps) {
         )}
       </div>
 
-      {error && (
+      {chatError && (
         <div className="mx-auto w-full max-w-3xl px-4 pb-1 sm:px-6">
-          <ErrorAlert error={error} onRetry={handleRetry} />
+          <ErrorAlert error={chatError} onRetry={handleRetry} />
         </div>
       )}
 
@@ -282,7 +320,7 @@ export function ChatTab({ repositoryId }: ChatTabProps) {
         value={query}
         onChange={setQuery}
         onSubmit={handleSend}
-        loading={loading}
+        loading={streaming}
         repositoryLabel={repositoryLabel}
       />
     </div>
@@ -325,10 +363,13 @@ function ChatMessageView({ message }: { message: ChatMessage }) {
           <span className="text-muted-foreground text-xs font-semibold">
             CodePilot
           </span>
-          <CopyButton text={message.content} label="Copy response" />
+          {!message.streaming && (
+            <CopyButton text={message.content} label="Copy response" />
+          )}
         </div>
         <div className="mt-1.5">
           <Markdown>{message.content}</Markdown>
+          {message.streaming && <StreamingCursor />}
         </div>
         {message.sources && message.sources.length > 0 && (
           <SourcesList sources={message.sources} />
@@ -338,32 +379,59 @@ function ChatMessageView({ message }: { message: ChatMessage }) {
   )
 }
 
-function SourcesList({ sources }: { sources: ChatSource[] }) {
+function StreamingCursor() {
   return (
-    <div className="mt-4 flex flex-col gap-2">
-      <span className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-        Sources
-      </span>
-      <div className="flex flex-col gap-1.5">
-        {sources.map((source, index) => (
-          <div
-            key={index}
-            className="border-border bg-muted/40 flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs"
-          >
-            <FileText className="text-muted-foreground size-3.5 shrink-0" />
-            <span className="font-mono min-w-0 flex-1 truncate">
-              {source.file_path}
-              {source.symbol_name ? ` · ${source.symbol_name}` : ""}
-            </span>
-            <span className="text-muted-foreground shrink-0">
-              L{source.start_line}–{source.end_line}
-            </span>
-            <Badge variant="secondary" className="shrink-0">
-              {source.score.toFixed(3)}
-            </Badge>
-          </div>
-        ))}
-      </div>
+    <span
+      aria-label="CodePilot is responding"
+      className="bg-primary ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm align-text-bottom"
+    />
+  )
+}
+
+function SourcesList({ sources }: { sources: ChatSource[] }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
+        className="text-muted-foreground hover:text-foreground focus-visible:ring-ring flex items-center gap-1.5 rounded-md text-[11px] font-medium tracking-wide uppercase transition-colors outline-none focus-visible:ring-2"
+      >
+        <ChevronRight
+          className={cn(
+            "size-3.5 transition-transform",
+            open && "rotate-90",
+          )}
+        />
+        Sources ({sources.length})
+      </button>
+      {open && (
+        <div className="mt-2 flex flex-col gap-1.5">
+          {sources.map((source, index) => (
+            <div
+              key={index}
+              className="border-border bg-muted/40 flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs"
+            >
+              <FileText className="text-muted-foreground size-3.5 shrink-0" />
+              <span className="font-mono min-w-0 flex-1 truncate">
+                {source.file_path}
+                {source.symbol_name &&
+                source.symbol_name !== "documentation"
+                  ? ` · ${source.symbol_name}`
+                  : ""}
+              </span>
+              <span className="text-muted-foreground shrink-0">
+                L{source.start_line}–{source.end_line}
+              </span>
+              <Badge variant="secondary" className="shrink-0">
+                {source.score.toFixed(3)}
+              </Badge>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

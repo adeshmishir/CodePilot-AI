@@ -27,6 +27,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [cloneError, setCloneError] =
     useState<WorkspaceContextValue["cloneError"]>(null)
   const [cloneProgress, setCloneProgress] = useState<CloneProgress | null>(null)
+  const cloneProgressRef = useRef<CloneProgress | null>(null)
+  cloneProgressRef.current = cloneProgress
   const [deletingId, setDeletingId] =
     useState<WorkspaceContextValue["deletingId"]>(null)
   const [deleteError, setDeleteError] =
@@ -218,6 +220,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     void loadRepositories()
   }, [loadRepositories])
 
+  const cancelClone = useCallback(() => {
+    const jobId = cloneProgressRef.current?.jobId
+    if (!jobId) return
+    setCloneProgress(null)
+    setCloning(false)
+    setCloneError(null)
+    void apiClient.cancelCloneJob(jobId).catch(() => {
+      // the worker may have already finished; the UI is cleared regardless
+    })
+  }, [])
+
   const clearCloneError = useCallback(() => setCloneError(null), [])
 
   const deleteRepository = useCallback(
@@ -280,6 +293,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setSidebarOpen,
     selectRepository,
     cloneRepository,
+    cancelClone,
     deleteRepository,
     reindexRepository,
     refreshRepositories,

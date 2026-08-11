@@ -24,12 +24,15 @@ import { WorkspaceHeader } from "@/components/workspace-header"
 import type { WorkspaceTab } from "@/components/workspace-header"
 import { WorkspaceProvider } from "@/context/workspace-provider"
 import { useWorkspace } from "@/context/use-workspace"
+import { ThemeProvider } from "@/context/theme-provider"
 
 export default function App() {
   return (
-    <WorkspaceProvider>
-      <Workspace />
-    </WorkspaceProvider>
+    <ThemeProvider>
+      <WorkspaceProvider>
+        <Workspace />
+      </WorkspaceProvider>
+    </ThemeProvider>
   )
 }
 

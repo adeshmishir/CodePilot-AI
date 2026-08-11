@@ -197,3 +197,75 @@ def test_service_failure_returns_500(monkeypatch):
         }
     finally:
         app.dependency_overrides.clear()
+
+
+def test_chat_stream_emits_sse_events(client):
+    class StreamingRAGService:
+        def answer_stream(self, query, repository_id, limit=5):
+            yield {"type": "sources", "sources": []}
+            yield {"type": "delta", "text": "Authentication "}
+            yield {"type": "delta", "text": "lives in src/auth."}
+            yield {"type": "done", "message": ""}
+
+    app.dependency_overrides[get_rag_service] = lambda: StreamingRAGService()
+
+    try:
+        response = client.post(
+            "/api/repositories/1/chat/stream",
+            json={"query": "where is auth?", "limit": 5},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+
+    events = [
+        line[len("data: "):]
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+
+    assert events == [
+        '{"type": "sources", "sources": []}',
+        '{"type": "delta", "text": "Authentication "}',
+        '{"type": "delta", "text": "lives in src/auth."}',
+        '{"type": "done", "message": ""}',
+    ]
+
+
+def test_chat_stream_invalid_repository_returns_404(client):
+    client.fake_db.repository_id = 9999
+
+    response = client.post(
+        "/api/repositories/9999/chat/stream",
+        json={"query": "authentication", "limit": 5},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Repository not found"}
+
+
+def test_chat_stream_emits_error_event_on_failure(client):
+    class ExplodingStreamRAGService:
+        def answer_stream(self, query, repository_id, limit=5):
+            raise RuntimeError("groq is down")
+            yield  # pragma: no cover
+
+    app.dependency_overrides[get_rag_service] = (
+        lambda: ExplodingStreamRAGService()
+    )
+
+    try:
+        response = client.post(
+            "/api/repositories/1/chat/stream",
+            json={"query": "authentication", "limit": 5},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert (
+        "Unable to generate an answer at this time."
+        in response.text
+    )

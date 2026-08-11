@@ -132,6 +132,11 @@ class CodeParser:
         return unique_symbols
 
     def create_chunks(self, file_path: Path):
+        language_name = get_language_from_path(file_path)
+
+        if language_name is None:
+            return self._create_doc_chunks(file_path)
+
         symbols = self.extract_symbols(file_path)
 
         chunks = []
@@ -153,6 +158,37 @@ class CodeParser:
                     start_line=symbol.start_line,
                     end_line=symbol.end_line,
                     content=content,
+                )
+            )
+
+        return chunks
+
+    def _create_doc_chunks(
+        self,
+        file_path: Path,
+        chunk_lines: int = 80,
+    ):
+        """Chunk documentation files (e.g. README.md) by line ranges.
+
+        Docs have no code symbols, so each chunk is a plain line window.
+        This lets the RAG pipeline answer "what is this project" style
+        questions that previously returned insufficient context.
+        """
+        source_lines = file_path.read_text().splitlines()
+
+        chunks = []
+
+        for start in range(0, len(source_lines), chunk_lines):
+            end = min(start + chunk_lines, len(source_lines))
+
+            chunks.append(
+                CodeChunk(
+                    file_path=str(file_path),
+                    symbol_name="documentation",
+                    symbol_type="documentation",
+                    start_line=start + 1,
+                    end_line=end,
+                    content="\n".join(source_lines[start:end]),
                 )
             )
 

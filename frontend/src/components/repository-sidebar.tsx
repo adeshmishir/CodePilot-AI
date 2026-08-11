@@ -8,6 +8,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Square,
   Trash2,
   X,
 } from "lucide-react"
@@ -36,6 +37,7 @@ export function RepositorySidebar() {
     sidebarOpen,
     selectRepository,
     cloneRepository,
+    cancelClone,
     deleteRepository,
     reindexRepository,
     refreshRepositories,
@@ -146,9 +148,22 @@ export function RepositorySidebar() {
                   ? "Cloning repository…"
                   : "Indexing files…"}
               </span>
-              <span className="text-muted-foreground text-xs tabular-nums">
-                {cloneProgress.percent}%
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground text-xs tabular-nums">
+                  {cloneProgress.percent}%
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-6"
+                  onClick={cancelClone}
+                  aria-label="Cancel clone"
+                  title="Cancel clone"
+                >
+                  <Square className="size-3" />
+                </Button>
+              </div>
             </div>
             <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
               <div

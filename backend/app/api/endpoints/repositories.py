@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 from app.database.session import SessionLocal, get_db
 from app.models.repository import RepositoryModel
 from app.services.github.git_service import git_service
-from app.services.repository.clone_progress import clone_progress
+from app.services.repository.clone_progress import (
+    CloneCancelledError,
+    clone_progress,
+)
 from app.services.repository.repository_service import repository_service
 from app.schemas.repository import (
     CloneJobStatusResponse,
@@ -52,6 +55,9 @@ def _run_clone_job(
 
         result = git_service.clone_repository(url)
         clone_succeeded = True
+
+        if clone_progress.is_cancelled(job_id):
+            raise CloneCancelledError()
 
         owner = result["owner"]
         repository_name = result["repository"]
@@ -103,6 +109,8 @@ def _run_clone_job(
             )
 
             def _report(done: int, total: int) -> None:
+                if clone_progress.is_cancelled(job_id):
+                    raise CloneCancelledError()
                 clone_progress.update(
                     job_id,
                     files_done=done,
@@ -138,6 +146,28 @@ def _run_clone_job(
             phase="indexing",
             message=message,
             repository_id=repository.id,
+        )
+    except CloneCancelledError:
+        db.rollback()
+
+        if repository is not None:
+            try:
+                repository_service.cleanup_repository(
+                    db,
+                    repository,
+                    remove_checkout=True,
+                )
+            except Exception as cleanup_error:
+                print(
+                    f"Failed cleaning up cancelled clone job {job_id}: "
+                    f"{cleanup_error}"
+                )
+
+        clone_progress.update(
+            job_id,
+            status="cancelled",
+            error="",
+            message="Clone cancelled.",
         )
     except Exception as error:
         db.rollback()
@@ -205,6 +235,22 @@ def clone_status(job_id: str):
         )
 
     return job
+
+
+@router.post("/clone/cancel/{job_id:path}")
+def cancel_clone(job_id: str):
+    cancelled = clone_progress.cancel(job_id)
+
+    if not cancelled:
+        raise HTTPException(
+            status_code=404,
+            detail="No active clone job found",
+        )
+
+    return {
+        "success": True,
+        "message": "Clone cancelled.",
+    }
 
 
 @router.post(

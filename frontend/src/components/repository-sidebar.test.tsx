@@ -6,6 +6,7 @@ import { RepositorySidebar } from "@/components/repository-sidebar"
 
 const mocks = vi.hoisted(() => ({
   cloneRepository: vi.fn(),
+  cancelClone: vi.fn(),
   deleteRepository: vi.fn(),
   reindexRepository: vi.fn(),
   cloneError: null as { message: string; detail?: string } | null,
@@ -43,6 +44,7 @@ vi.mock("@/context/use-workspace", () => ({
     sidebarOpen: true,
     selectRepository: vi.fn(),
     cloneRepository: mocks.cloneRepository,
+    cancelClone: mocks.cancelClone,
     deleteRepository: mocks.deleteRepository,
     reindexRepository: mocks.reindexRepository,
     refreshRepositories: vi.fn(),
@@ -57,6 +59,7 @@ describe("RepositorySidebar", () => {
     mocks.deleteError = null
     mocks.cloneProgress = null
     mocks.cloneRepository.mockReset()
+    mocks.cancelClone.mockReset()
     mocks.deleteRepository.mockReset()
     mocks.reindexRepository.mockReset()
   })
@@ -166,5 +169,24 @@ describe("RepositorySidebar", () => {
     render(<RepositorySidebar />)
 
     expect(screen.getByText("Cloning repository…")).toBeInTheDocument()
+  })
+
+  it("cancels a running clone job", async () => {
+    const user = userEvent.setup()
+    mocks.cloneProgress = {
+      jobId: "adeshmishir/CoinOracle",
+      phase: "indexing",
+      percent: 30,
+      filesDone: 30,
+      filesTotal: 100,
+    }
+
+    render(<RepositorySidebar />)
+
+    await user.click(
+      screen.getByRole("button", { name: "Cancel clone" }),
+    )
+
+    expect(mocks.cancelClone).toHaveBeenCalledTimes(1)
   })
 })

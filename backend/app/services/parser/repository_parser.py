@@ -46,6 +46,7 @@ class RepositoryParser:
         ".php",
         ".swift",
         ".kt",
+        ".md",
     }
 
     def _is_binary(self, file_path: Path) -> bool:

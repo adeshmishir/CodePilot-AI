@@ -398,6 +398,60 @@ def test_clone_returns_running_job_when_already_in_progress(
     clone_progress.update("adeshmishir/BusyProject", status="done")
 
 
+def test_cancel_clone_marks_job_cancelled(client, monkeypatch):
+    from app.services.repository.clone_progress import clone_progress
+
+    monkeypatch.setattr(
+        "app.api.endpoints.repositories.clone_progress",
+        clone_progress,
+    )
+
+    clone_progress.start("adeshmishir/CancelMe")
+
+    response = client.post(
+        "/repositories/clone/cancel/adeshmishir/CancelMe"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "message": "Clone cancelled.",
+    }
+
+    assert clone_progress.is_cancelled("adeshmishir/CancelMe")
+
+    clone_progress.update("adeshmishir/CancelMe", status="done")
+
+
+def test_cancel_clone_returns_404_for_unknown_job(client, monkeypatch):
+    from app.services.repository.clone_progress import clone_progress
+
+    monkeypatch.setattr(
+        "app.api.endpoints.repositories.clone_progress",
+        clone_progress,
+    )
+
+    response = client.post("/repositories/clone/cancel/unknown/owner")
+
+    assert response.status_code == 404
+
+
+def test_cancel_completed_job_returns_404(client, monkeypatch):
+    from app.services.repository.clone_progress import clone_progress
+
+    monkeypatch.setattr(
+        "app.api.endpoints.repositories.clone_progress",
+        clone_progress,
+    )
+
+    clone_progress.start("adeshmishir/DoneJob")
+    clone_progress.update("adeshmishir/DoneJob", status="done")
+
+    response = client.post("/repositories/clone/cancel/adeshmishir/DoneJob")
+
+    assert response.status_code == 404
+
+
 def test_reindex_repository(client):
     response = client.post("/repositories/1/reindex")
 

@@ -7,10 +7,13 @@ import {
   ChevronDown,
   FolderGit2,
   Menu,
+  Moon,
   Sparkles,
+  Sun,
 } from "lucide-react"
 
 import { Tooltip } from "@/components/ui/tooltip"
+import { useTheme } from "@/context/use-theme"
 import { useWorkspace } from "@/context/use-workspace"
 import type { HealthState } from "@/context/workspace-context"
 import { cn } from "@/lib/utils"
@@ -56,6 +59,7 @@ export function WorkspaceHeader({ activeTab }: WorkspaceHeaderProps) {
     selectRepository,
     health,
   } = useWorkspace()
+  const { theme, toggleTheme } = useTheme()
 
   const healthMeta = HEALTH_META[health]
 
@@ -87,6 +91,28 @@ export function WorkspaceHeader({ activeTab }: WorkspaceHeaderProps) {
       </div>
 
       <div className="flex min-w-0 items-center gap-2">
+        <Tooltip
+          content={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          side="bottom"
+        >
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={
+              theme === "dark"
+                ? "Switch to light mode"
+                : "Switch to dark mode"
+            }
+            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring flex size-8 shrink-0 items-center justify-center rounded-md outline-none hover:bg-accent focus-visible:ring-2"
+          >
+            {theme === "dark" ? (
+              <Sun className="size-4" />
+            ) : (
+              <Moon className="size-4" />
+            )}
+          </button>
+        </Tooltip>
+
         <RepositorySwitcher
           repositories={repositories}
           selectedId={selectedId}

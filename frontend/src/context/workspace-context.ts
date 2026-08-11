@@ -31,6 +31,7 @@ export interface WorkspaceContextValue {
   setSidebarOpen: (open: boolean) => void
   selectRepository: (repository: RepositoryListItem) => void
   cloneRepository: (url: string) => Promise<void>
+  cancelClone: () => void
   deleteRepository: (repository: RepositoryListItem) => Promise<void>
   reindexRepository: (repository: RepositoryListItem) => Promise<void>
   refreshRepositories: () => void

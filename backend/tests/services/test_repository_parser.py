@@ -26,10 +26,11 @@ def test_supported_source_files_are_discovered(tmp_path):
     write_file(tmp_path, "src/a.py")
     write_file(tmp_path, "src/b.js")
     write_file(tmp_path, "README.md")
+    write_file(tmp_path, "notes.txt")
 
     files = parser.get_repository_files(tmp_path)
 
-    assert file_names(files) == {"a.py", "b.js"}
+    assert file_names(files) == {"a.py", "b.js", "README.md"}
 
 
 @pytest.mark.parametrize(
