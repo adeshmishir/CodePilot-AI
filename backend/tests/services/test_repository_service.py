@@ -307,7 +307,7 @@ def test_index_repository_raises_when_no_source_files(
     make_git_repo(
         source,
         {
-            "notes.txt": "# documentation only",
+            "notes.xyz": "# documentation only",
         },
     )
 

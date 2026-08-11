@@ -26,11 +26,63 @@ def test_supported_source_files_are_discovered(tmp_path):
     write_file(tmp_path, "src/a.py")
     write_file(tmp_path, "src/b.js")
     write_file(tmp_path, "README.md")
-    write_file(tmp_path, "notes.txt")
+    write_file(tmp_path, "notes.xyz")
 
     files = parser.get_repository_files(tmp_path)
 
     assert file_names(files) == {"a.py", "b.js", "README.md"}
+
+
+def test_common_web_and_config_extensions_are_discovered(tmp_path):
+    parser = RepositoryParser()
+
+    write_file(tmp_path, "ui/App.jsx")
+    write_file(tmp_path, "ui/styles.css")
+    write_file(tmp_path, "index.html")
+    write_file(tmp_path, "pages/index.vue")
+    write_file(tmp_path, "config.yaml")
+    write_file(tmp_path, "main.rs")
+    write_file(tmp_path, "script.sh")
+
+    files = parser.get_repository_files(tmp_path)
+
+    assert file_names(files) == {
+        "App.jsx",
+        "styles.css",
+        "index.html",
+        "index.vue",
+        "config.yaml",
+        "main.rs",
+        "script.sh",
+    }
+
+
+def test_lockfiles_and_minified_files_are_skipped(tmp_path):
+    parser = RepositoryParser()
+
+    write_file(tmp_path, "package-lock.json", "{}")
+    write_file(tmp_path, "yarn.lock", "yarn lock contents")
+    write_file(tmp_path, "static/vendor.min.js", "var a=1;")
+    write_file(tmp_path, "static/vendor.min.css", ".a{color:red}")
+    kept = write_file(tmp_path, "src/kept.py")
+
+    files = parser.get_repository_files(tmp_path)
+
+    assert files == [kept]
+
+
+def test_max_index_files_cap_bounds_file_count(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "MAX_INDEX_FILES", 2)
+
+    parser = RepositoryParser()
+
+    write_file(tmp_path, "a.py")
+    write_file(tmp_path, "b.py")
+    write_file(tmp_path, "c.py")
+
+    files = parser.get_repository_files(tmp_path)
+
+    assert len(files) == 2
 
 
 @pytest.mark.parametrize(
