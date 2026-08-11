@@ -43,6 +43,7 @@ export function AgentTab({ repositoryId }: AgentTabProps) {
     const text = query.trim()
     if (!text || loading) return
     setSubmittedQuery(text)
+    setQuery("")
     void run(text, multi ? "multi" : "single")
   }
 
@@ -107,7 +108,9 @@ export function AgentTab({ repositoryId }: AgentTabProps) {
         <div className="mx-auto w-full max-w-3xl">
           <ErrorAlert
             error={error}
-            onRetry={() => void run(query.trim(), multi ? "multi" : "single")}
+            onRetry={() =>
+              void run(submittedQuery, multi ? "multi" : "single")
+            }
           />
         </div>
       )}

@@ -2,7 +2,15 @@
 
 import { useState } from "react"
 
-import { Check, FolderGit2, Plus, RefreshCw } from "lucide-react"
+import {
+  Check,
+  FolderGit2,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+  X,
+} from "lucide-react"
 
 import { ErrorAlert } from "@/components/error-alert"
 import { Button } from "@/components/ui/button"
@@ -10,6 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useWorkspace } from "@/context/use-workspace"
 import { cn } from "@/lib/utils"
+import type { RepositoryListItem } from "@/types/api"
 
 export function RepositorySidebar() {
   const {
@@ -19,18 +28,32 @@ export function RepositorySidebar() {
     listError,
     cloning,
     cloneError,
+    deletingId,
+    deleteError,
+    reindexingId,
+    repoActionError,
     sidebarOpen,
     selectRepository,
     cloneRepository,
+    deleteRepository,
+    reindexRepository,
     refreshRepositories,
+    clearCloneError,
+    clearRepoActionError,
   } = useWorkspace()
   const [url, setUrl] = useState("")
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!url.trim() || cloning) return
     await cloneRepository(url.trim())
     setUrl("")
+  }
+
+  const handleConfirmDelete = async (repository: RepositoryListItem) => {
+    await deleteRepository(repository)
+    setPendingDeleteId(null)
   }
 
   return (
@@ -85,12 +108,42 @@ export function RepositorySidebar() {
             {cloning ? "Cloning…" : "Clone repository"}
           </Button>
           {cloneError && (
-            <p role="alert" className="text-destructive text-xs">
-              {cloneError.message}
-            </p>
+            <div className="flex items-start gap-1">
+              <ErrorAlert error={cloneError} className="flex-1" />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="mt-0.5 size-6 shrink-0"
+                onClick={clearCloneError}
+                aria-label="Dismiss clone error"
+                title="Dismiss"
+              >
+                <X className="size-3.5" />
+              </Button>
+            </div>
           )}
         </form>
       </div>
+
+      {repoActionError && (
+        <div className="border-b p-3">
+          <div className="flex items-start gap-1">
+            <ErrorAlert error={repoActionError} className="flex-1" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="mt-0.5 size-6 shrink-0"
+              onClick={clearRepoActionError}
+              aria-label="Dismiss error"
+              title="Dismiss"
+            >
+              <X className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       <nav className="flex-1 overflow-y-auto p-2">
         {loadingRepositories ? (
@@ -122,34 +175,112 @@ export function RepositorySidebar() {
           <ul className="flex flex-col gap-1">
             {repositories.map((repository) => {
               const active = selectedId === repository.id
+              const isDeleting = deletingId === repository.id
+              const isReindexing = reindexingId === repository.id
+              const busy = isDeleting || isReindexing
+              const confirming = pendingDeleteId === repository.id
+
               return (
                 <li key={repository.id}>
-                  <button
-                    type="button"
-                    onClick={() => selectRepository(repository)}
-                    aria-current={active ? "true" : undefined}
+                  <div
                     className={cn(
-                      "hover:bg-accent group relative flex w-full flex-col items-start gap-0.5 rounded-md py-2 pr-3 pl-3 text-left transition-colors",
+                      "flex items-center rounded-md transition-colors",
                       active &&
                         "bg-accent text-accent-foreground ring-border ring-1 ring-inset",
                     )}
                   >
-                    <span className="flex w-full items-center justify-between gap-2">
-                      <span
-                        className={cn(
-                          "min-w-0 flex-1 truncate text-sm font-medium",
+                    <button
+                      type="button"
+                      onClick={() => selectRepository(repository)}
+                      aria-current={active ? "true" : undefined}
+                      className="hover:bg-accent flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-md py-2 pr-1 pl-3 text-left transition-colors"
+                    >
+                      <span className="flex w-full items-center justify-between gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                          {repository.owner}/{repository.name}
+                        </span>
+                        {active && (
+                          <Check className="text-primary size-4 shrink-0" />
                         )}
-                      >
-                        {repository.owner}/{repository.name}
                       </span>
-                      {active && (
-                        <Check className="text-primary size-4 shrink-0" />
+                      <span className="text-muted-foreground w-full truncate text-xs">
+                        {repository.local_path}
+                      </span>
+                    </button>
+
+                    <div className="flex shrink-0 items-center gap-0.5 pr-1.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        onClick={() => reindexRepository(repository)}
+                        disabled={busy}
+                        aria-label={`Reindex ${repository.owner}/${repository.name}`}
+                        title="Reindex repository"
+                      >
+                        {isReindexing ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="size-3.5" />
+                        )}
+                      </Button>
+
+                      {confirming && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-7"
+                          onClick={() => setPendingDeleteId(null)}
+                          disabled={busy}
+                          aria-label="Cancel delete"
+                          title="Cancel"
+                        >
+                          <X className="size-3.5" />
+                        </Button>
                       )}
-                    </span>
-                    <span className="text-muted-foreground w-full truncate text-xs">
-                      {repository.local_path}
-                    </span>
-                  </button>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          "size-7",
+                          confirming
+                            ? "text-destructive hover:text-destructive"
+                            : "hover:text-destructive",
+                        )}
+                        onClick={() =>
+                          confirming
+                            ? void handleConfirmDelete(repository)
+                            : setPendingDeleteId(repository.id)
+                        }
+                        disabled={busy}
+                        aria-label={
+                          confirming
+                            ? `Confirm delete ${repository.owner}/${repository.name}`
+                            : `Delete ${repository.owner}/${repository.name}`
+                        }
+                        title={
+                          confirming
+                            ? "Confirm delete repository"
+                            : "Delete repository"
+                        }
+                      >
+                        {isDeleting ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-3.5" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  {deleteError && confirming && (
+                    <div className="mt-1 px-1">
+                      <ErrorAlert error={deleteError} className="text-xs" />
+                    </div>
+                  )}
                 </li>
               )
             })}

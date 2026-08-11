@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 
 import { ArrowDown, Bot, FileText, Trash2 } from "lucide-react"
 
@@ -29,14 +29,37 @@ interface ChatTabProps {
 
 const NEAR_BOTTOM_OFFSET = 100
 
+function scrollToTopOf(el: HTMLElement) {
+  if (typeof el.scrollIntoView !== "function") return
+  try {
+    el.scrollIntoView({ block: "start", inline: "nearest" })
+  } catch {
+    // no-op in test environments that do not implement scrolling
+  }
+}
+
+function scrollContainerToBottom(el: HTMLElement) {
+  if (typeof el.scrollTo === "function") {
+    try {
+      el.scrollTo({ top: el.scrollHeight, behavior: "auto" })
+      return
+    } catch {
+      // fall through to scrollTop assignment
+    }
+  }
+  el.scrollTop = el.scrollHeight
+}
+
 export function ChatTab({ repositoryId }: ChatTabProps) {
   const { selected } = useWorkspace()
   const [query, setQuery] = useState("")
   const [histories, setHistories] = useState<Record<number, ChatMessage[]>>({})
   const idRef = useRef(0)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const messageRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const nearBottomRef = useRef(true)
   const sendingRef = useRef(false)
+  const pendingScrollBottomRef = useRef(false)
   const [showJump, setShowJump] = useState(false)
   const previousRepoRef = useRef<number | null>(null)
 
@@ -100,6 +123,29 @@ export function ChatTab({ repositoryId }: ChatTabProps) {
     }
   }, [messages])
 
+  const lastAssistantId = useMemo(() => {
+    if (messages.length === 0) return null
+    const last = messages[messages.length - 1]
+    return last.role === "assistant" ? last.id : null
+  }, [messages])
+
+  useLayoutEffect(() => {
+    if (!pendingScrollBottomRef.current) return
+    pendingScrollBottomRef.current = false
+    const el = scrollRef.current
+    if (!el) return
+    scrollContainerToBottom(el)
+    setShowJump(false)
+  }, [messages])
+
+  useLayoutEffect(() => {
+    if (lastAssistantId == null || !nearBottomRef.current) return
+    const el = messageRefs.current[lastAssistantId]
+    if (!el) return
+    scrollToTopOf(el)
+    setShowJump(false)
+  }, [lastAssistantId])
+
   const handleScroll = () => {
     const el = scrollRef.current
     if (!el) return
@@ -120,6 +166,7 @@ export function ChatTab({ repositoryId }: ChatTabProps) {
     ])
     setQuery("")
     nearBottomRef.current = true
+    pendingScrollBottomRef.current = true
 
     void run(text).then((result) => {
       sendingRef.current = false
@@ -189,7 +236,14 @@ export function ChatTab({ repositoryId }: ChatTabProps) {
             )}
 
             {messages.map((message) => (
-              <ChatMessageView key={message.id} message={message} />
+              <div
+                key={message.id}
+                ref={(el) => {
+                  messageRefs.current[message.id] = el
+                }}
+              >
+                <ChatMessageView message={message} />
+              </div>
             ))}
 
             {loading && (

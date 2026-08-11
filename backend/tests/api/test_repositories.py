@@ -6,7 +6,7 @@ from app.main import app
 from app.models.repository import RepositoryModel
 from app.services.github.git_service import git_service
 from app.services.repository.repository_service import repository_service
-from app.core.exceptions import RepositoryIndexError
+from app.core.exceptions import RepositoryCloneError, RepositoryIndexError
 
 
 class FakeQuery:
@@ -99,6 +99,16 @@ class FakeRepositoryService:
             "vectors_indexed": 5,
         }
 
+    def count_chunks(self, repository_id, db):
+        return 3
+
+    def count_vectors(self, repository_id):
+        return 5
+
+    def cleanup_repository(self, db, repository, remove_checkout=True):
+        db.delete(repository)
+        db.commit()
+
 
 def make_repository(id):
     repository = RepositoryModel(
@@ -134,6 +144,24 @@ def client(monkeypatch):
         repository_service.__class__,
         "index_repository",
         fake_indexer.index_repository,
+    )
+
+    monkeypatch.setattr(
+        repository_service.__class__,
+        "count_chunks",
+        fake_indexer.count_chunks,
+    )
+
+    monkeypatch.setattr(
+        repository_service.__class__,
+        "count_vectors",
+        fake_indexer.count_vectors,
+    )
+
+    monkeypatch.setattr(
+        repository_service.__class__,
+        "cleanup_repository",
+        fake_indexer.cleanup_repository,
     )
 
     def override_get_db():
@@ -196,7 +224,9 @@ def test_clone_new_repository(client):
     assert body["id"] == 1
     assert body["repository"] == "NewProject"
     assert body["owner"] == "adeshmishir"
-    assert body["message"] == "Repository cloned successfully"
+    assert body["message"] == (
+        "Cloned and indexed 3 files into 5 chunks and 5 vectors."
+    )
 
     assert client.fake_indexer.calls == [
         {
@@ -206,9 +236,46 @@ def test_clone_new_repository(client):
     ]
 
 
-def test_clone_existing_repository_skips_indexing(client):
-    client.fake_db.repositories[0].local_path = (
-        "data/repos/adeshmishir/CoinOracle"
+def test_clone_existing_healthy_repository_skips_indexing(client):
+    response = client.post(
+        "/repositories/clone",
+        json={
+            "url": "https://github.com/adeshmishir/CoinOracle",
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["id"] == 1
+    assert body["message"] == "Repository already exists and is up to date."
+
+    assert client.fake_indexer.calls == []
+
+
+def test_clone_existing_broken_repository_is_reindexed(
+    client,
+    monkeypatch,
+):
+    class BrokenRepositoryService:
+        def count_chunks(self, repository_id, db):
+            return 0
+
+        def count_vectors(self, repository_id):
+            return 5
+
+    broken = BrokenRepositoryService()
+
+    monkeypatch.setattr(
+        repository_service.__class__,
+        "count_chunks",
+        broken.count_chunks,
+    )
+    monkeypatch.setattr(
+        repository_service.__class__,
+        "count_vectors",
+        broken.count_vectors,
     )
 
     response = client.post(
@@ -223,9 +290,17 @@ def test_clone_existing_repository_skips_indexing(client):
     body = response.json()
 
     assert body["id"] == 1
-    assert body["message"] == "Repository cloned successfully"
+    assert body["message"] == (
+        "Repository recovered and re-indexed 3 files into 5 chunks and "
+        "5 vectors."
+    )
 
-    assert client.fake_indexer.calls == []
+    assert client.fake_indexer.calls == [
+        {
+            "repository_id": 1,
+            "repository_path": "data/repos/adeshmishir/CoinOracle",
+        }
+    ]
 
 
 def test_reindex_repository(client):
@@ -314,3 +389,56 @@ def test_clone_rolls_back_row_when_indexing_fails(
         "message": "No supported source files were found. Nothing to index.",
     }
     assert len(client.fake_db.repositories) == before
+
+
+def test_clone_returns_clone_error_detail(client, monkeypatch):
+    class FailingGitService:
+        def clone_repository(self, url):
+            raise RepositoryCloneError(
+                "Repository could not be cloned. Please check the GitHub URL "
+                "and repository access.",
+                detail="repository not found",
+            )
+
+    monkeypatch.setattr(
+        git_service.__class__,
+        "clone_repository",
+        FailingGitService().clone_repository,
+    )
+
+    response = client.post(
+        "/repositories/clone",
+        json={
+            "url": "https://github.com/adeshmishir/Secret",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "success": False,
+        "message": (
+            "Repository could not be cloned. Please check the GitHub URL and "
+            "repository access."
+        ),
+        "detail": "repository not found",
+    }
+
+
+def test_delete_repository(client):
+    response = client.delete("/repositories/1")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "message": "Repository deleted.",
+    }
+
+    remaining = [repository.id for repository in client.fake_db.repositories]
+
+    assert remaining == [2]
+
+
+def test_delete_missing_repository_returns_404(client):
+    response = client.delete("/repositories/9999")
+
+    assert response.status_code == 404

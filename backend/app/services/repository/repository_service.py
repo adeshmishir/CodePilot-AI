@@ -3,12 +3,28 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import RepositoryIndexError
+from app.models.code_chunk import CodeChunkModel
 from app.models.repository import RepositoryModel
 from app.services.github.git_service import git_service
 from app.services.repository.paths import (
     backend_root,
     normalize_local_path,
     relative_local_path,
+)
+
+NO_SUPPORTED_FILES_MESSAGE = (
+    "This repository was cloned, but no supported source files were found, "
+    "so CodePilot could not index it."
+)
+
+NO_CHUNKS_MESSAGE = (
+    "No code chunks could be created for repository "
+    "'{repository}'. Nothing to index."
+)
+
+NO_VECTORS_MESSAGE = (
+    "No vectors could be indexed into the vector store for repository "
+    "'{repository}'."
 )
 
 
@@ -34,10 +50,8 @@ class RepositoryService:
         repository_path: str,
         db: Session
     ):
-        from app.services.embedding.embedding_service import EmbeddingService
         from app.services.indexing.vector_indexer import VectorIndexer
         from app.services.parser.repository_parser import repository_parser
-        from app.services.vector.vector_store import get_vector_store
 
         repository = (
             db.query(RepositoryModel)
@@ -60,41 +74,89 @@ class RepositoryService:
 
         if not files:
             raise RepositoryIndexError(
-                "No supported source files were found in "
-                f"{path}. Nothing to index."
+                NO_SUPPORTED_FILES_MESSAGE
             )
 
-        chunks = self.indexer.index_files(
-            files=files,
-            repository_id=repository_id,
-            db=db
-        )
+        chunks = self.indexer.build_chunks(files)
 
         if not chunks:
             raise RepositoryIndexError(
-                "No code chunks could be created for repository "
-                f"'{repository.name}'. Nothing to index."
+                NO_CHUNKS_MESSAGE.format(repository=repository.name)
             )
 
-        vectors_indexed = VectorIndexer(
-            embedding_service=EmbeddingService(),
-            vector_store=get_vector_store(),
-        ).index_repository(
+        vectors_indexed = VectorIndexer().index_chunks(
             db=db,
             repository_id=repository_id,
+            chunks=chunks,
         )
 
         if vectors_indexed == 0:
             raise RepositoryIndexError(
-                "No vectors could be indexed into the vector store "
-                f"for repository '{repository.name}'."
+                NO_VECTORS_MESSAGE.format(repository=repository.name)
             )
+
+        self.indexer.replace_chunks(
+            chunks=chunks,
+            repository_id=repository_id,
+            db=db,
+        )
 
         return {
             "files_discovered": len(files),
             "chunks_created": len(chunks),
             "vectors_indexed": vectors_indexed,
         }
+
+    def count_chunks(self, repository_id: int, db: Session) -> int:
+        return (
+            db.query(CodeChunkModel)
+            .filter(CodeChunkModel.repository_id == repository_id)
+            .count()
+        )
+
+    def count_vectors(self, repository_id: int) -> int:
+        from app.services.vector.vector_store import get_vector_store
+
+        return get_vector_store().count_repository_points(repository_id)
+
+    def cleanup_repository(
+        self,
+        db: Session,
+        repository: RepositoryModel,
+        remove_checkout: bool = True,
+    ) -> None:
+        """Remove every trace of a repository after a failed clone or delete.
+
+        Vector points and the checkout are cleaned up best-effort, while the
+        chunk rows and repository row are always removed.
+        """
+        from app.services.vector.vector_store import get_vector_store
+
+        try:
+            get_vector_store().delete_repository_points(repository.id)
+        except Exception as error:
+            print(
+                f"Failed removing vectors for repository "
+                f"{repository.id}: {error}"
+            )
+
+        if remove_checkout and repository.local_path:
+            try:
+                git_service.remove_repository(
+                    normalize_local_path(repository.local_path)
+                )
+            except Exception as error:
+                print(
+                    f"Failed removing checkout for repository "
+                    f"{repository.id}: {error}"
+                )
+
+        db.query(CodeChunkModel).filter(
+            CodeChunkModel.repository_id == repository.id
+        ).delete(synchronize_session=False)
+
+        db.delete(repository)
+        db.commit()
 
     def _ensure_clone(
         self,

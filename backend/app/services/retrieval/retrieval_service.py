@@ -1,4 +1,7 @@
-from app.services.embedding.embedding_service import EmbeddingService
+from app.services.embedding.embedding_service import (
+    EmbeddingService,
+    get_embedding_service,
+)
 from app.services.vector.vector_store import VectorStore, get_vector_store
 
 
@@ -56,7 +59,7 @@ def get_retrieval_service() -> RetrievalService:
 
     if retrieval_service is None:
         retrieval_service = RetrievalService(
-            embedding_service=EmbeddingService(),
+            embedding_service=get_embedding_service(),
             vector_store=get_vector_store(),
         )
 

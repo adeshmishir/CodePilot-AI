@@ -41,6 +41,10 @@ class FakeFastEmbed:
         for _ in texts:
             yield np.ones(VECTOR_SIZE, dtype=np.float32)
 
+    def embed_batch(self, texts):
+        for _ in texts:
+            yield np.ones(VECTOR_SIZE, dtype=np.float32)
+
 
 @pytest.fixture
 def fake_fastembed(monkeypatch):

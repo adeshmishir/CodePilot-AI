@@ -12,13 +12,8 @@ class RepositoryIndexer:
     def __init__(self):
         self.parser = CodeParser()
 
-    def index_files(
-        self,
-        files: list[Path],
-        repository_id: int,
-        db: Session
-    ) -> list[CodeChunk]:
-
+    def build_chunks(self, files: list[Path]) -> list[CodeChunk]:
+        """Parse source files into chunks without touching the database."""
         chunks = []
 
         for file in files:
@@ -31,6 +26,15 @@ class RepositoryIndexer:
                     f"Failed parsing {file}: {error}"
                 )
 
+        return chunks
+
+    def replace_chunks(
+        self,
+        chunks: list[CodeChunk],
+        repository_id: int,
+        db: Session
+    ) -> None:
+        """Replace persisted chunk rows for a repository."""
         db.query(CodeChunkModel).filter(
             CodeChunkModel.repository_id == repository_id
         ).delete(synchronize_session=False)
@@ -49,5 +53,19 @@ class RepositoryIndexer:
             db.add(code_chunk)
 
         db.commit()
+
+    def index_files(
+        self,
+        files: list[Path],
+        repository_id: int,
+        db: Session
+    ) -> list[CodeChunk]:
+        chunks = self.build_chunks(files)
+
+        self.replace_chunks(
+            chunks=chunks,
+            repository_id=repository_id,
+            db=db,
+        )
 
         return chunks

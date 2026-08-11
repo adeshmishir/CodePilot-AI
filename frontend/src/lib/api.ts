@@ -42,14 +42,17 @@ const DEFAULT_BASE_URL = resolveBaseUrl()
 
 export class ApiClientError extends Error {
   readonly status: number
+  readonly detail: string | undefined
 
   constructor(
     message: string,
     status: number,
+    detail?: string,
   ) {
     super(message)
     this.name = "ApiClientError"
     this.status = status
+    this.detail = detail
   }
 }
 
@@ -92,20 +95,24 @@ export class ApiClient {
 
       if (!response.ok) {
         let message = `Request failed with status ${response.status}`
+        let detail: string | undefined
         try {
           const body = (await response.json()) as {
             detail?: unknown
             message?: string
           }
-          if (typeof body.detail === "string") {
-            message = body.detail
-          } else if (body.message) {
+          if (typeof body.message === "string") {
             message = body.message
+          } else if (typeof body.detail === "string") {
+            message = body.detail
+          }
+          if (typeof body.detail === "string") {
+            detail = body.detail
           }
         } catch {
           // fall back to the status-based message
         }
-        throw new ApiClientError(message, response.status)
+        throw new ApiClientError(message, response.status, detail)
       }
 
       return response.json() as Promise<T>
@@ -143,6 +150,17 @@ export class ApiClient {
       `/repositories/${repositoryId}/reindex`,
       {
         method: "POST",
+      },
+    )
+  }
+
+  async deleteRepository(
+    repositoryId: number,
+  ): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(
+      `/repositories/${repositoryId}`,
+      {
+        method: "DELETE",
       },
     )
   }

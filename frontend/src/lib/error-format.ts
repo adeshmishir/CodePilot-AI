@@ -5,18 +5,21 @@ export interface FormattedError {
   detail?: string
 }
 
+function isStatusFallbackMessage(message: string): boolean {
+  return /^Request failed with status \d+$/.test(message)
+}
+
 export function formatApiError(caught: unknown): FormattedError {
   if (caught instanceof ApiClientError) {
-    const detail = caught.message
+    const detail = caught.detail ?? caught.message
     switch (caught.status) {
-      case 404:
-        return {
-          message: "The requested repository could not be found.",
-          detail,
-        }
       case 400:
+      case 404:
+      case 409:
         return {
-          message: "The request was invalid. Please adjust the input and try again.",
+          message: isStatusFallbackMessage(caught.message)
+            ? "The request was invalid. Please adjust the input and try again."
+            : caught.message,
           detail,
         }
       case 401:

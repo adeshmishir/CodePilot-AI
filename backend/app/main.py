@@ -29,12 +29,17 @@ async def repository_clone_exception_handler(
     request: Request,
     exc: RepositoryCloneError
 ):
+    content = {
+        "success": False,
+        "message": exc.message
+    }
+
+    if exc.detail:
+        content["detail"] = exc.detail
+
     return JSONResponse(
         status_code=400,
-        content={
-            "success": False,
-            "message": exc.message
-        }
+        content=content
     )
 
 
@@ -43,12 +48,17 @@ async def repository_index_exception_handler(
     request: Request,
     exc: RepositoryIndexError
 ):
+    content = {
+        "success": False,
+        "message": exc.message
+    }
+
+    if exc.detail:
+        content["detail"] = exc.detail
+
     return JSONResponse(
         status_code=400,
-        content={
-            "success": False,
-            "message": exc.message
-        }
+        content=content
     )
 
 

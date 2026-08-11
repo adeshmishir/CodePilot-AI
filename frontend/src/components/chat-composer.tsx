@@ -43,18 +43,19 @@ export function ChatComposer({
     resize()
   }, [value])
 
+  const canSend = !loading && value.trim().length > 0 && !disabled
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (
       event.key === "Enter" &&
       !event.shiftKey &&
-      !event.nativeEvent.isComposing
+      !event.nativeEvent.isComposing &&
+      canSend
     ) {
       event.preventDefault()
       onSubmit()
     }
   }
-
-  const canSend = !loading && value.trim().length > 0 && !disabled
 
   return (
     <div className="px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4">

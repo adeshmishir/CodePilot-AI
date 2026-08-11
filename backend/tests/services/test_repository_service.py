@@ -70,6 +70,10 @@ class FakeEmbeddingService:
     def embed(self, text):
         return [0.5] * 384
 
+    def embed_batch(self, texts):
+        for _ in texts:
+            yield [0.5] * 384
+
 
 class FakeVectorStore:
     def __init__(self):
@@ -89,6 +93,24 @@ class FakeVectorStore:
             }
         )
 
+    def upsert_embeddings(self, points):
+        self.upserted.extend(
+            {
+                "point_id": point.id,
+                "payload": point.payload,
+            }
+            for point in points
+        )
+
+    def list_repository_point_ids(self, repository_id):
+        return []
+
+    def delete_points_by_ids(self, point_ids):
+        pass
+
+    def count_repository_points(self, repository_id):
+        return len(self.upserted)
+
 
 @pytest.fixture
 def db():
@@ -103,6 +125,10 @@ def db():
 
 @pytest.fixture
 def clone_root(tmp_path, monkeypatch):
+    import app.services.embedding.embedding_service as embedding_module
+
+    embedding_module._embedding_service = None
+
     monkeypatch.setattr(
         "app.services.embedding.embedding_service.EmbeddingService",
         FakeEmbeddingService,
@@ -122,7 +148,9 @@ def clone_root(tmp_path, monkeypatch):
 
     monkeypatch.setattr(git_service, "repositories_dir", root)
 
-    return root
+    yield root
+
+    embedding_module._embedding_service = None
 
 
 def make_source(tmp_path):
@@ -294,4 +322,4 @@ def test_index_repository_raises_when_no_source_files(
             db=db,
         )
 
-    assert "No supported source files" in str(error.value)
+    assert "no supported source files" in str(error.value)

@@ -1,12 +1,26 @@
 import os
+import re
 import shutil
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 from git import Repo
 
 from app.core.exceptions import RepositoryCloneError
 from app.services.repository.paths import backend_root, relative_local_path
+
+CLONE_FAILED_MESSAGE = (
+    "Repository could not be cloned. Please check the GitHub URL and "
+    "repository access."
+)
+
+INVALID_URL_MESSAGE = (
+    "Invalid repository URL. Please provide a full GitHub URL such as "
+    "https://github.com/owner/repository."
+)
+
+MAX_DETAIL_LENGTH = 400
 
 
 def _remove_tree(path: Path) -> None:
@@ -19,6 +33,15 @@ def _remove_tree(path: Path) -> None:
     shutil.rmtree(path, ignore_errors=True)
 
 
+def _redact_credentials(text: str) -> str:
+    """Mask credentials embedded in URLs inside arbitrary text."""
+    return re.sub(
+        r"(?<=://)([^/@:\s]+):([^/@\s]+)@",
+        r"\1:***@",
+        text,
+    )
+
+
 class GitService:
     def __init__(self, repositories_dir: Path | None = None):
         if repositories_dir is None:
@@ -28,10 +51,28 @@ class GitService:
         self.repositories_dir.mkdir(parents=True, exist_ok=True)
 
     def _extract_repository_info(self, url: str):
-        path = url.rstrip("/").split("/")
+        value = url.strip()
 
-        owner = path[-2]
-        repository = path[-1].replace(".git", "")
+        if "://" in value:
+            parsed = urlparse(value)
+
+            if parsed.scheme not in ("http", "https") or not parsed.hostname:
+                raise RepositoryCloneError(INVALID_URL_MESSAGE)
+
+            path = parsed.path
+        else:
+            path = value
+
+        parts = [part for part in path.replace("\\", "/").split("/") if part]
+
+        if len(parts) < 2:
+            raise RepositoryCloneError(INVALID_URL_MESSAGE)
+
+        owner = parts[-2]
+        repository = parts[-1].replace(".git", "")
+
+        if not owner or not repository:
+            raise RepositoryCloneError(INVALID_URL_MESSAGE)
 
         return owner, repository
 
@@ -90,6 +131,10 @@ class GitService:
             repository,
         )
 
+    def remove_repository(self, local_path: Path) -> None:
+        """Best-effort removal of a repository checkout."""
+        _remove_tree(local_path)
+
     def _clone(
         self,
         url: str,
@@ -112,12 +157,56 @@ class GitService:
             "message": "Repository cloned successfully",
         }
 
+    def _describe_clone_error(self, error: Exception) -> str:
+        message = str(error).lower()
+
+        if (
+            "could not read username" in message
+            or "authentication" in message
+            or "access denied" in message
+            or "permission denied" in message
+            or "403" in message
+            or "401" in message
+        ):
+            return (
+                "GitHub rejected the clone because authentication is missing "
+                "or invalid. Private repositories require access credentials."
+            )
+
+        if (
+            "not found" in message
+            or "does not appear" in message
+            or "could not read from remote repository" in message
+        ):
+            return (
+                "GitHub reports that this repository does not exist, was "
+                "renamed, or is not publicly accessible."
+            )
+
+        if (
+            "could not resolve host" in message
+            or "unable to access" in message
+            or "network" in message
+            or "timed out" in message
+            or "temporary failure" in message
+        ):
+            return (
+                "Could not connect to GitHub. Check your network connection "
+                "and try again."
+            )
+
+        return CLONE_FAILED_MESSAGE
+
+    def _redact_error(self, error: Exception) -> str:
+        return _redact_credentials(str(error))[:MAX_DETAIL_LENGTH]
+
     def _clone_repository(self, url: str, destination: Path) -> None:
         try:
             Repo.clone_from(url, destination)
         except Exception as error:
             raise RepositoryCloneError(
-                "Unable to clone repository"
+                self._describe_clone_error(error),
+                detail=self._redact_error(error),
             ) from error
 
 

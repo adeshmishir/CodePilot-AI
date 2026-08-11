@@ -25,16 +25,22 @@ interface BugDetectionTabProps {
 export function BugDetectionTab({ repositoryId }: BugDetectionTabProps) {
   const { selected } = useWorkspace()
   const [query, setQuery] = useState("")
+  const [submittedQuery, setSubmittedQuery] = useState("")
   const { loading, error, result, submitted, run, reset } = useAsyncSubmit(
     (q: string) => apiClient.detectBugs(repositoryId, { query: q, limit: 8 }),
   )
 
-  useRepositoryReset(repositoryId, reset)
+  useRepositoryReset(repositoryId, () => {
+    reset()
+    setSubmittedQuery("")
+  })
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const text = query.trim()
     if (!text || loading) return
+    setSubmittedQuery(text)
+    setQuery("")
     void run(text)
   }
 
@@ -81,7 +87,10 @@ export function BugDetectionTab({ repositoryId }: BugDetectionTabProps) {
 
       {error && (
         <div className="mx-auto w-full max-w-3xl">
-          <ErrorAlert error={error} onRetry={() => void run(query.trim())} />
+          <ErrorAlert
+            error={error}
+            onRetry={() => void run(submittedQuery)}
+          />
         </div>
       )}
 

@@ -104,6 +104,80 @@ class VectorStore:
             ],
         )
 
+    def upsert_embeddings(self, points: list[PointStruct]) -> None:
+        self.client.upsert(
+            collection_name=COLLECTION_NAME,
+            points=points,
+        )
+
+    def count_repository_points(self, repository_id: int) -> int:
+        from qdrant_client.models import (
+            FieldCondition,
+            Filter,
+            MatchValue,
+        )
+
+        self.ensure_collection()
+
+        result = self.client.count(
+            collection_name=COLLECTION_NAME,
+            count_filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="repository_id",
+                        match=MatchValue(value=repository_id),
+                    )
+                ]
+            ),
+            exact=True,
+        )
+
+        return result.count
+
+    def list_repository_point_ids(self, repository_id: int) -> list[int]:
+        from qdrant_client.models import (
+            FieldCondition,
+            Filter,
+            MatchValue,
+        )
+
+        self.ensure_collection()
+
+        point_ids: list[int] = []
+        offset = None
+
+        while True:
+            points, offset = self.client.scroll(
+                collection_name=COLLECTION_NAME,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="repository_id",
+                            match=MatchValue(value=repository_id),
+                        )
+                    ]
+                ),
+                limit=1000,
+                offset=offset,
+                with_payload=False,
+                with_vectors=False,
+            )
+
+            point_ids.extend(point.id for point in points)
+
+            if offset is None:
+                return point_ids
+
+    def delete_points_by_ids(self, point_ids: list[int]) -> None:
+        from qdrant_client.models import PointIdsList
+
+        self.ensure_collection()
+
+        self.client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=PointIdsList(points=point_ids),
+        )
+
     def search(
         self,
         vector: list[float],

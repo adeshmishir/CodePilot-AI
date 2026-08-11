@@ -24,16 +24,22 @@ interface SearchTabProps {
 export function SearchTab({ repositoryId }: SearchTabProps) {
   const { selected } = useWorkspace()
   const [query, setQuery] = useState("")
+  const [submittedQuery, setSubmittedQuery] = useState("")
   const { loading, error, result, submitted, run, reset } = useAsyncSubmit(
     (q: string) => apiClient.search(repositoryId, { query: q, limit: 10 }),
   )
 
-  useRepositoryReset(repositoryId, reset)
+  useRepositoryReset(repositoryId, () => {
+    reset()
+    setSubmittedQuery("")
+  })
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const text = query.trim()
     if (!text || loading) return
+    setSubmittedQuery(text)
+    setQuery("")
     void run(text)
   }
 
@@ -69,12 +75,15 @@ export function SearchTab({ repositoryId }: SearchTabProps) {
 
       {error && (
         <div className="mx-auto w-full max-w-3xl">
-          <ErrorAlert error={error} onRetry={() => void run(query.trim())} />
+          <ErrorAlert
+            error={error}
+            onRetry={() => void run(submittedQuery)}
+          />
         </div>
       )}
 
       {!loading && !error && submitted && (
-        <SearchResults result={result} query={query.trim()} />
+        <SearchResults result={result} query={submittedQuery} />
       )}
     </div>
   )

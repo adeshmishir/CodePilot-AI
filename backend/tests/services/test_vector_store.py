@@ -274,3 +274,127 @@ def test_delete_repository_points(tmp_path, monkeypatch):
 
     assert [point.id for point in repo_one] == []
     assert [point.id for point in repo_two] == [3]
+
+
+def test_upsert_embeddings_in_batch(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.QDRANT_URL",
+        str(tmp_path),
+    )
+
+    store = VectorStore()
+    store.create_collection()
+
+    store.upsert_embeddings(
+        [
+            PointStruct(
+                id=10,
+                vector=make_vector(),
+                payload={"repository_id": 1},
+            ),
+            PointStruct(
+                id=11,
+                vector=make_vector(),
+                payload={"repository_id": 1},
+            ),
+        ]
+    )
+
+    points = store.search(
+        vector=make_vector(),
+        limit=10,
+        repository_id=1,
+    )
+
+    assert sorted(point.id for point in points) == [10, 11]
+
+
+def test_count_repository_points(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.QDRANT_URL",
+        str(tmp_path),
+    )
+
+    store = VectorStore()
+    store.create_collection()
+
+    store.upsert_embedding(
+        point_id=1,
+        vector=make_vector(),
+        payload={"repository_id": 1},
+    )
+    store.upsert_embedding(
+        point_id=2,
+        vector=make_vector(),
+        payload={"repository_id": 1},
+    )
+    store.upsert_embedding(
+        point_id=3,
+        vector=make_vector(),
+        payload={"repository_id": 2},
+    )
+
+    assert store.count_repository_points(1) == 2
+    assert store.count_repository_points(2) == 1
+    assert store.count_repository_points(3) == 0
+
+
+def test_list_repository_point_ids(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.QDRANT_URL",
+        str(tmp_path),
+    )
+
+    store = VectorStore()
+    store.create_collection()
+
+    store.upsert_embedding(
+        point_id=1,
+        vector=make_vector(),
+        payload={"repository_id": 1},
+    )
+    store.upsert_embedding(
+        point_id=2,
+        vector=make_vector(),
+        payload={"repository_id": 1},
+    )
+    store.upsert_embedding(
+        point_id=3,
+        vector=make_vector(),
+        payload={"repository_id": 2},
+    )
+
+    assert sorted(store.list_repository_point_ids(1)) == [1, 2]
+    assert store.list_repository_point_ids(2) == [3]
+
+
+def test_delete_points_by_ids(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.vector.vector_store.settings.QDRANT_URL",
+        str(tmp_path),
+    )
+
+    store = VectorStore()
+    store.create_collection()
+
+    store.upsert_embedding(
+        point_id=1,
+        vector=make_vector(),
+        payload={"repository_id": 1},
+    )
+    store.upsert_embedding(
+        point_id=2,
+        vector=make_vector(),
+        payload={"repository_id": 1},
+    )
+    store.upsert_embedding(
+        point_id=3,
+        vector=make_vector(),
+        payload={"repository_id": 1},
+    )
+
+    store.delete_points_by_ids([1, 3])
+
+    remaining = store.list_repository_point_ids(1)
+
+    assert remaining == [2]

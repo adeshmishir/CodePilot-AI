@@ -1,20 +1,124 @@
+import hashlib
+
 from sqlalchemy.orm import Session
 
+from qdrant_client.models import PointStruct
+
+from app.config.settings import settings
 from app.models.code_chunk import CodeChunkModel
-from app.services.embedding.embedding_service import EmbeddingService
-from app.services.vector.vector_store import VectorStore
+from app.schemas.code_chunk import CodeChunk
+from app.services.embedding.embedding_service import (
+    EmbeddingService,
+    get_embedding_service,
+)
+from app.services.vector.vector_store import (
+    VectorStore,
+    get_vector_store,
+)
+
+
+def point_id(repository_id: int, chunk: CodeChunk | CodeChunkModel) -> int:
+    """Derive a stable, deterministic Qdrant point id for a chunk.
+
+    The id is computed from repository + file + symbol + line span rather
+    than the database primary key so that reindexing a repository always
+    overwrites the same points and stale points can be removed by id.
+    """
+    key = "|".join(
+        [
+            str(repository_id),
+            chunk.file_path,
+            chunk.symbol_name or "",
+            str(chunk.start_line),
+            str(chunk.end_line),
+        ]
+    )
+
+    digest = hashlib.sha1(key.encode("utf-8")).digest()
+
+    return int.from_bytes(digest[:8], "big")
 
 
 class VectorIndexer:
-    """Index persisted code chunks into Qdrant."""
+    """Index code chunks into Qdrant."""
 
     def __init__(
         self,
-        embedding_service: EmbeddingService,
-        vector_store: VectorStore,
+        embedding_service: EmbeddingService | None = None,
+        vector_store: VectorStore | None = None,
     ):
-        self.embedding_service = embedding_service
-        self.vector_store = vector_store
+        self.embedding_service = embedding_service or get_embedding_service()
+        self.vector_store = vector_store or get_vector_store()
+
+    def _chunk_to_point(
+        self,
+        chunk: CodeChunk | CodeChunkModel,
+        repository_id: int,
+        vector: list[float],
+    ) -> PointStruct:
+        return PointStruct(
+            id=point_id(repository_id, chunk),
+            vector=vector,
+            payload={
+                "repository_id": repository_id,
+                "file_path": chunk.file_path,
+                "symbol_name": chunk.symbol_name,
+                "symbol_type": chunk.symbol_type,
+                "start_line": chunk.start_line,
+                "end_line": chunk.end_line,
+                "content": chunk.content,
+            },
+        )
+
+    def index_chunks(
+        self,
+        db: Session,
+        repository_id: int,
+        chunks: list[CodeChunk | CodeChunkModel],
+    ) -> int:
+        """Upsert vectors for the given chunks, then drop stale points.
+
+        Vectors are written in bounded batches to keep peak memory flat
+        during embedding, and stale points for the repository are only
+        removed after all new vectors have been upserted successfully.
+        """
+        self.vector_store.create_collection()
+
+        batch_size = settings.INDEX_BATCH_SIZE
+
+        for offset in range(0, len(chunks), batch_size):
+            batch = chunks[offset:offset + batch_size]
+
+            vectors = list(
+                self.embedding_service.embed_batch(
+                    [chunk.content for chunk in batch]
+                )
+            )
+
+            points = [
+                self._chunk_to_point(chunk, repository_id, vector)
+                for chunk, vector in zip(batch, vectors)
+            ]
+
+            self.vector_store.upsert_embeddings(points)
+
+        existing_ids = self.vector_store.list_repository_point_ids(repository_id)
+
+        new_ids = {
+            point_id(repository_id, chunk)
+            for chunk in chunks
+        }
+
+        stale_ids = [
+            existing_id
+            for existing_id in existing_ids
+            if existing_id not in new_ids
+        ]
+
+        if stale_ids:
+            self.vector_store.delete_points_by_ids(stale_ids)
+
+        return len(chunks)
 
     def index_repository(
         self,
@@ -27,25 +131,10 @@ class VectorIndexer:
             .all()
         )
 
-        self.vector_store.create_collection()
-
-        self.vector_store.delete_repository_points(repository_id)
-
-        for chunk in chunks:
-            vector = self.embedding_service.embed(chunk.content)
-
-            self.vector_store.upsert_embedding(
-                point_id=chunk.id,
-                vector=vector,
-                payload={
-                    "repository_id": chunk.repository_id,
-                    "file_path": chunk.file_path,
-                    "symbol_name": chunk.symbol_name,
-                    "symbol_type": chunk.symbol_type,
-                    "start_line": chunk.start_line,
-                    "end_line": chunk.end_line,
-                    "content": chunk.content,
-                },
-            )
+        self.index_chunks(
+            db=db,
+            repository_id=repository_id,
+            chunks=chunks,
+        )
 
         return len(chunks)

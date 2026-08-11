@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import RepositoryIndexError
 from app.database.session import get_db
 from app.models.repository import RepositoryModel
 from app.services.github.git_service import git_service
@@ -58,19 +57,22 @@ def clone_repository(
         str(request.url)
     )
 
+    owner = result["owner"]
+    repository_name = result["repository"]
+
     repository = (
         db.query(RepositoryModel)
         .filter(
-            RepositoryModel.owner == result["owner"],
-            RepositoryModel.name == result["repository"]
+            RepositoryModel.owner == owner,
+            RepositoryModel.name == repository_name
         )
         .first()
     )
 
     if repository is None:
         repository = RepositoryModel(
-            owner=result["owner"],
-            name=result["repository"],
+            owner=owner,
+            name=repository_name,
             clone_url=str(request.url),
             local_path=result["local_path"]
         )
@@ -80,23 +82,58 @@ def clone_repository(
         db.refresh(repository)
 
         try:
-            repository_service.index_repository(
+            index_result = repository_service.index_repository(
                 repository_id=repository.id,
                 repository_path=repository.local_path,
                 db=db
             )
-        except RepositoryIndexError:
-            db.delete(repository)
-            db.commit()
+        except Exception:
+            repository_service.cleanup_repository(
+                db,
+                repository,
+                remove_checkout=True,
+            )
             raise
 
+        message = (
+            f"Cloned and indexed {index_result['files_discovered']} files "
+            f"into {index_result['chunks_created']} chunks and "
+            f"{index_result['vectors_indexed']} vectors."
+        )
+    else:
+        needs_index = not (
+            repository_service.count_chunks(
+                repository_id=repository.id,
+                db=db,
+            ) > 0
+            and repository_service.count_vectors(
+                repository_id=repository.id,
+            ) > 0
+        )
+
+        if needs_index:
+            index_result = repository_service.index_repository(
+                repository_id=repository.id,
+                repository_path=repository.local_path,
+                db=db
+            )
+
+            message = (
+                f"Repository recovered and re-indexed "
+                f"{index_result['files_discovered']} files into "
+                f"{index_result['chunks_created']} chunks and "
+                f"{index_result['vectors_indexed']} vectors."
+            )
+        else:
+            message = "Repository already exists and is up to date."
+
     return {
-        "success": result["success"],
+        "success": True,
         "id": repository.id,
-        "repository": result["repository"],
-        "owner": result["owner"],
-        "local_path": result["local_path"],
-        "message": result["message"],
+        "repository": repository.name,
+        "owner": repository.owner,
+        "local_path": repository.local_path,
+        "message": message,
     }
 
 
@@ -137,4 +174,35 @@ def reindex_repository(
             f"{result['chunks_created']} chunks and "
             f"{result['vectors_indexed']} vectors."
         ),
+    }
+
+
+@router.delete(
+    "/{repository_id}",
+)
+def delete_repository(
+    repository_id: int,
+    db: Session = Depends(get_db)
+):
+    repository = (
+        db.query(RepositoryModel)
+        .filter(RepositoryModel.id == repository_id)
+        .first()
+    )
+
+    if repository is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Repository not found"
+        )
+
+    repository_service.cleanup_repository(
+        db,
+        repository,
+        remove_checkout=True,
+    )
+
+    return {
+        "success": True,
+        "message": "Repository deleted.",
     }

@@ -13,13 +13,20 @@ export interface WorkspaceContextValue {
   listError: FormattedError | null
   cloning: boolean
   cloneError: FormattedError | null
+  deletingId: number | null
+  deleteError: FormattedError | null
+  reindexingId: number | null
+  repoActionError: FormattedError | null
   health: HealthState
   sidebarOpen: boolean
   setSidebarOpen: (open: boolean) => void
   selectRepository: (repository: RepositoryListItem) => void
   cloneRepository: (url: string) => Promise<void>
+  deleteRepository: (repository: RepositoryListItem) => Promise<void>
+  reindexRepository: (repository: RepositoryListItem) => Promise<void>
   refreshRepositories: () => void
   clearCloneError: () => void
+  clearRepoActionError: () => void
 }
 
 export const WorkspaceContext = createContext<WorkspaceContextValue | null>(
