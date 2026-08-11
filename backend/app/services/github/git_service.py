@@ -3,10 +3,11 @@ import re
 import shutil
 
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from git import Repo
 
+from app.config.settings import settings
 from app.core.exceptions import RepositoryCloneError
 from app.services.repository.paths import backend_root, relative_local_path
 
@@ -15,10 +16,27 @@ CLONE_FAILED_MESSAGE = (
     "repository access."
 )
 
+AUTH_FAILED_MESSAGE = (
+    "Repository could not be cloned. GitHub authentication is missing or "
+    "invalid, or the token does not have access to this repository."
+)
+
+NOT_FOUND_MESSAGE = (
+    "Repository could not be cloned. GitHub reports that this repository "
+    "does not exist, was renamed, or is not publicly accessible."
+)
+
+NETWORK_FAILED_MESSAGE = (
+    "Repository could not be cloned. Could not connect to GitHub. Check "
+    "your network connection and try again."
+)
+
 INVALID_URL_MESSAGE = (
     "Invalid repository URL. Please provide a full GitHub URL such as "
     "https://github.com/owner/repository."
 )
+
+GITHUB_HOST = "github.com"
 
 MAX_DETAIL_LENGTH = 400
 
@@ -147,7 +165,11 @@ class GitService:
 
         repository_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self._clone_repository(url, repository_path)
+        try:
+            self._clone_repository(url, repository_path)
+        except Exception:
+            _remove_tree(repository_path)
+            raise
 
         return {
             "success": True,
@@ -165,23 +187,19 @@ class GitService:
             or "authentication" in message
             or "access denied" in message
             or "permission denied" in message
+            or "not granted" in message
+            or "write access" in message
             or "403" in message
             or "401" in message
         ):
-            return (
-                "GitHub rejected the clone because authentication is missing "
-                "or invalid. Private repositories require access credentials."
-            )
+            return AUTH_FAILED_MESSAGE
 
         if (
             "not found" in message
             or "does not appear" in message
             or "could not read from remote repository" in message
         ):
-            return (
-                "GitHub reports that this repository does not exist, was "
-                "renamed, or is not publicly accessible."
-            )
+            return NOT_FOUND_MESSAGE
 
         if (
             "could not resolve host" in message
@@ -190,19 +208,53 @@ class GitService:
             or "timed out" in message
             or "temporary failure" in message
         ):
-            return (
-                "Could not connect to GitHub. Check your network connection "
-                "and try again."
-            )
+            return NETWORK_FAILED_MESSAGE
 
         return CLONE_FAILED_MESSAGE
 
     def _redact_error(self, error: Exception) -> str:
-        return _redact_credentials(str(error))[:MAX_DETAIL_LENGTH]
+        message = str(error)
+
+        token = settings.GITHUB_TOKEN.strip()
+
+        if token:
+            message = message.replace(token, "***")
+
+        return _redact_credentials(message)[:MAX_DETAIL_LENGTH]
+
+    def _build_clone_url(self, url: str) -> str:
+        """Return a clone URL, injecting the server-side GitHub token only
+        for github.com hosts. The credentials are transient and never stored.
+        """
+        token = settings.GITHUB_TOKEN.strip()
+
+        if not token:
+            return url
+
+        parsed = urlparse(url)
+
+        if parsed.scheme not in ("http", "https") or parsed.hostname is None:
+            return url
+
+        if parsed.hostname.lower() != GITHUB_HOST:
+            return url
+
+        owner, repository = self._extract_repository_info(url)
+
+        encoded_token = quote(token, safe="")
+
+        return (
+            f"https://x-access-token:{encoded_token}@github.com/"
+            f"{owner}/{repository}.git"
+        )
 
     def _clone_repository(self, url: str, destination: Path) -> None:
         try:
-            Repo.clone_from(url, destination)
+            Repo.clone_from(
+                self._build_clone_url(url),
+                destination,
+                env={"GIT_TERMINAL_PROMPT": "0"},
+            )
         except Exception as error:
             raise RepositoryCloneError(
                 self._describe_clone_error(error),

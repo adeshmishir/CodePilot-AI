@@ -1,6 +1,10 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
+from git import Repo
 
+from app.config.settings import settings
 from app.database.session import get_db
 from app.main import app
 from app.models.repository import RepositoryModel
@@ -422,6 +426,58 @@ def test_clone_returns_clone_error_detail(client, monkeypatch):
         ),
         "detail": "repository not found",
     }
+
+
+def test_clone_auth_failure_is_sanitized_and_never_leaks_token(
+    monkeypatch,
+    tmp_path,
+):
+    token = "ghp_secret_api_token"
+
+    monkeypatch.setattr(settings, "GITHUB_TOKEN", token)
+    monkeypatch.setattr(git_service, "repositories_dir", tmp_path)
+
+    def failing_clone(url, to_path, **kwargs):
+        raise Exception(
+            "Cmd('git') failed due to: exit code(128)\n"
+            "cmdline: git clone -v -- "
+            f"'https://x-access-token:{token}@github.com/"
+            "adeshmishir/Secret.git'\n"
+            "stderr: fatal: Authentication failed for "
+            f"'https://x-access-token:{token}@github.com/"
+            "adeshmishir/Secret.git/'"
+        )
+
+    monkeypatch.setattr(Repo, "clone_from", staticmethod(failing_clone))
+
+    class _NullDB:
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: None
+
+    def override_get_db():
+        yield _NullDB()
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/repositories/clone",
+                json={
+                    "url": "https://github.com/adeshmishir/Secret",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+
+    body = response.json()
+
+    assert body["success"] is False
+    assert "authentication is missing or invalid" in body["message"]
+    assert token not in json.dumps(body)
+    assert "x-access-token:***" in body["detail"]
 
 
 def test_delete_repository(client):

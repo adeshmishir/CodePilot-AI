@@ -68,6 +68,23 @@ describe("RepositorySidebar", () => {
     ).toBeInTheDocument()
   })
 
+  it("shows the clone authentication error message", () => {
+    mocks.cloneError = {
+      message:
+        "Repository could not be cloned. GitHub authentication is missing or invalid, or the token does not have access to this repository.",
+      detail: "fatal: Authentication failed",
+    }
+
+    render(<RepositorySidebar />)
+
+    expect(
+      screen.getByText(/Repository could not be cloned/),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/GitHub authentication is missing or invalid/),
+    ).toBeInTheDocument()
+  })
+
   it("deletes a repository after confirming", async () => {
     const user = userEvent.setup()
     mocks.deleteRepository.mockResolvedValue(undefined)
