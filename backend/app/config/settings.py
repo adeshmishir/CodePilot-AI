@@ -25,8 +25,8 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     RAG_CONTEXT_MAX_CHARS: int = 8000
     AGENT_MAX_STEPS: int = 5
-    INDEX_BATCH_SIZE: int = 4
-    MAX_INDEX_FILE_SIZE_MB: float = 1.0
+    INDEX_BATCH_SIZE: int = 2
+    MAX_INDEX_FILE_SIZE_MB: float = 0.5
     MAX_INDEX_FILES: int = 1000
 
     model_config = SettingsConfigDict(

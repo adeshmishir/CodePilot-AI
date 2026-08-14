@@ -1,5 +1,6 @@
 import json
 import re
+import threading
 
 from app.services.github.github_client import GitHubClient
 from app.services.llm.groq_service import GroqService
@@ -233,15 +234,18 @@ class PullRequestReviewError(Exception):
 
 
 pull_request_review_service: PullRequestReviewService | None = None
+pull_request_review_service_lock = threading.Lock()
 
 
 def get_pull_request_review_service() -> PullRequestReviewService:
     global pull_request_review_service
 
     if pull_request_review_service is None:
-        pull_request_review_service = PullRequestReviewService(
-            github_client=GitHubClient(),
-            groq_service=GroqService(),
-        )
+        with pull_request_review_service_lock:
+            if pull_request_review_service is None:
+                pull_request_review_service = PullRequestReviewService(
+                    github_client=GitHubClient(),
+                    groq_service=GroqService(),
+                )
 
     return pull_request_review_service

@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 
 from sqlalchemy.orm import Session
 
@@ -192,15 +193,18 @@ def _safe_message(error: Exception) -> str:
 
 
 agent_service: AgentService | None = None
+agent_service_lock = threading.Lock()
 
 
 def get_agent_service() -> AgentService:
     global agent_service
 
     if agent_service is None:
-        agent_service = AgentService(
-            groq_service=GroqService(),
-            retrieval_service=get_retrieval_service(),
-        )
+        with agent_service_lock:
+            if agent_service is None:
+                agent_service = AgentService(
+                    groq_service=GroqService(),
+                    retrieval_service=get_retrieval_service(),
+                )
 
     return agent_service

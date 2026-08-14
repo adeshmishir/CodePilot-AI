@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -5,12 +7,24 @@ from fastapi.responses import JSONResponse
 from app.api.router import router
 from app.config.settings import settings
 from app.core.exceptions import RepositoryCloneError, RepositoryIndexError
+from app.core.memory import log_memory
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    log_memory("startup")
+
+    yield
+
+    log_memory("shutdown")
+
 
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="AI Software Engineering Agent",
     debug=settings.DEBUG,
+    lifespan=lifespan,
 )
 
 app.add_middleware(

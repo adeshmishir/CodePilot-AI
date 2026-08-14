@@ -1,3 +1,5 @@
+import threading
+
 from app.services.llm.groq_service import GroqService
 from app.services.rag.context_builder import ContextBuilder
 from app.services.rag.query_classifier import (
@@ -163,16 +165,19 @@ class RAGService:
 
 
 rag_service: RAGService | None = None
+rag_service_lock = threading.Lock()
 
 
 def get_rag_service() -> RAGService:
     global rag_service
 
     if rag_service is None:
-        rag_service = RAGService(
-            retrieval_service=get_retrieval_service(),
-            context_builder=ContextBuilder(),
-            groq_service=GroqService(),
-        )
+        with rag_service_lock:
+            if rag_service is None:
+                rag_service = RAGService(
+                    retrieval_service=get_retrieval_service(),
+                    context_builder=ContextBuilder(),
+                    groq_service=GroqService(),
+                )
 
     return rag_service

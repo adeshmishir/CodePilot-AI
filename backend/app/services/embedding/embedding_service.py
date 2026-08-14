@@ -1,7 +1,11 @@
+import threading
+
 from app.config.settings import settings
+from app.core.memory import log_memory
 
 
 _embedding_service: "EmbeddingService | None" = None
+_embedding_service_lock = threading.Lock()
 
 
 def get_embedding_service() -> "EmbeddingService":
@@ -9,12 +13,17 @@ def get_embedding_service() -> "EmbeddingService":
 
     Loading the ONNX embedding model is expensive and memory-heavy, so
     every component must reuse a single instance per process instead of
-    constructing new ones per request.
+    constructing new ones per request. The lock is important: model
+    loading is lazy and the clone/index worker runs on a separate thread,
+    so a concurrent request could otherwise construct a second copy of
+    the model and blow through the instance memory limit.
     """
     global _embedding_service
 
     if _embedding_service is None:
-        _embedding_service = EmbeddingService()
+        with _embedding_service_lock:
+            if _embedding_service is None:
+                _embedding_service = EmbeddingService()
 
     return _embedding_service
 
@@ -28,6 +37,8 @@ class EmbeddingService:
         self.model = TextEmbedding(
             model_name=settings.EMBEDDING_MODEL,
         )
+
+        log_memory("embedding model loaded")
 
     def embed(self, text: str) -> list[float]:
         embedding = next(self.model.embed([text]))

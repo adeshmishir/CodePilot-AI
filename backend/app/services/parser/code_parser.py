@@ -87,9 +87,7 @@ class CodeParser:
 
         return None
 
-    def extract_symbols(self, file_path: Path):
-        root = self.get_root_node(file_path)
-
+    def _symbols_from_root(self, root) -> list[CodeSymbol]:
         symbols = []
 
         def visit(node):
@@ -131,17 +129,36 @@ class CodeParser:
 
         return unique_symbols
 
+    def extract_symbols(self, file_path: Path):
+        root = self.get_root_node(file_path)
+        return self._symbols_from_root(root)
+
     def create_chunks(self, file_path: Path):
         language_name = get_language_from_path(file_path)
 
         if language_name is None:
             return self._create_doc_chunks(file_path)
 
-        symbols = self.extract_symbols(file_path)
+        # Read the source bytes once and reuse them for both the AST parse
+        # and the chunk contents. Reading the file twice (once as bytes for
+        # tree-sitter and again via read_text()) doubles the per-file peak
+        # memory, which matters when hundreds of files are indexed back to
+        # back on a small instance.
+        self.parser.language = get_language(language_name)
+
+        source_bytes = file_path.read_bytes()
+
+        source_lines = source_bytes.decode("utf-8", errors="replace").splitlines()
+
+        tree = self.parser.parse(source_bytes)
+
+        # The symbol objects are independent of the tree and the bytes, so
+        # release both as soon as the traversal is done.
+        symbols = self._symbols_from_root(tree.root_node)
+        del tree
+        del source_bytes
 
         chunks = []
-
-        source_lines = file_path.read_text().splitlines()
 
         for symbol in symbols:
             content = "\n".join(
@@ -174,7 +191,12 @@ class CodeParser:
         This lets the RAG pipeline answer "what is this project" style
         questions that previously returned insufficient context.
         """
-        source_lines = file_path.read_text().splitlines()
+        source_text = file_path.read_text()
+
+        if "\x00" in source_text:
+            return []
+
+        source_lines = source_text.splitlines()
 
         chunks = []
 

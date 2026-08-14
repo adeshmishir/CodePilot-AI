@@ -1,5 +1,6 @@
 import json
 import re
+import threading
 
 from app.services.llm.groq_service import GroqService
 from app.services.rag.context_builder import ContextBuilder
@@ -175,16 +176,19 @@ class BugDetectionService:
 
 
 bug_detection_service: BugDetectionService | None = None
+bug_detection_service_lock = threading.Lock()
 
 
 def get_bug_detection_service() -> BugDetectionService:
     global bug_detection_service
 
     if bug_detection_service is None:
-        bug_detection_service = BugDetectionService(
-            retrieval_service=get_retrieval_service(),
-            context_builder=ContextBuilder(),
-            groq_service=GroqService(),
-        )
+        with bug_detection_service_lock:
+            if bug_detection_service is None:
+                bug_detection_service = BugDetectionService(
+                    retrieval_service=get_retrieval_service(),
+                    context_builder=ContextBuilder(),
+                    groq_service=GroqService(),
+                )
 
     return bug_detection_service

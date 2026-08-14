@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import threading
 
 from sqlalchemy.orm import Session
 
@@ -308,17 +309,20 @@ def _safe_message(error: Exception) -> str:
 
 
 multi_agent_orchestrator: MultiAgentOrchestrator | None = None
+multi_agent_orchestrator_lock = threading.Lock()
 
 
 def get_multi_agent_orchestrator() -> MultiAgentOrchestrator:
     global multi_agent_orchestrator
 
     if multi_agent_orchestrator is None:
-        multi_agent_orchestrator = MultiAgentOrchestrator(
-            groq_service=GroqService(),
-            rag_service=get_rag_service(),
-            bug_detection_service=get_bug_detection_service(),
-            agent_service=get_agent_service(),
-        )
+        with multi_agent_orchestrator_lock:
+            if multi_agent_orchestrator is None:
+                multi_agent_orchestrator = MultiAgentOrchestrator(
+                    groq_service=GroqService(),
+                    rag_service=get_rag_service(),
+                    bug_detection_service=get_bug_detection_service(),
+                    agent_service=get_agent_service(),
+                )
 
     return multi_agent_orchestrator

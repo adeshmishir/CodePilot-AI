@@ -2,6 +2,12 @@ from app.services.embedding.embedding_service import (
     EmbeddingService,
     get_embedding_service,
 )
+import threading
+
+from app.services.embedding.embedding_service import (
+    EmbeddingService,
+    get_embedding_service,
+)
 from app.services.vector.vector_store import VectorStore, get_vector_store
 
 
@@ -52,15 +58,18 @@ class RetrievalService:
 
 
 retrieval_service: RetrievalService | None = None
+retrieval_service_lock = threading.Lock()
 
 
 def get_retrieval_service() -> RetrievalService:
     global retrieval_service
 
     if retrieval_service is None:
-        retrieval_service = RetrievalService(
-            embedding_service=get_embedding_service(),
-            vector_store=get_vector_store(),
-        )
+        with retrieval_service_lock:
+            if retrieval_service is None:
+                retrieval_service = RetrievalService(
+                    embedding_service=get_embedding_service(),
+                    vector_store=get_vector_store(),
+                )
 
     return retrieval_service

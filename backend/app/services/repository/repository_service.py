@@ -1,8 +1,11 @@
+import gc
+import threading
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import RepositoryIndexError
+from app.core.memory import log_memory
 from app.models.code_chunk import CodeChunkModel
 from app.models.repository import RepositoryModel
 from app.services.github.git_service import git_service
@@ -148,6 +151,18 @@ class RepositoryService:
                     f"Failed indexing a file for repository "
                     f"{repository_id}: {error}"
                 )
+            finally:
+                # Release this file's chunk list before the loop rebinds it,
+                # and periodically run the GC + log RSS so steady-state
+                # memory on the free tier stays bounded and observable.
+                del file_chunks
+
+                if processed_files % 50 == 0:
+                    gc.collect()
+                    log_memory(
+                        f"index_repository {repository_id} "
+                        f"({processed_files}/{total_files} files)"
+                    )
 
         if total_chunks == 0:
             raise RepositoryIndexError(
@@ -265,13 +280,16 @@ class RepositoryService:
 
 
 repository_service: RepositoryService | None = None
+repository_service_lock = threading.Lock()
 
 
 def get_repository_service() -> RepositoryService:
     global repository_service
 
     if repository_service is None:
-        repository_service = RepositoryService()
+        with repository_service_lock:
+            if repository_service is None:
+                repository_service = RepositoryService()
 
     return repository_service
 

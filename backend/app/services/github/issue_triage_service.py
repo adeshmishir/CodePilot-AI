@@ -1,5 +1,6 @@
 import json
 import re
+import threading
 
 from app.services.github.github_client import GitHubClient
 from app.services.llm.groq_service import GroqService
@@ -242,15 +243,18 @@ class IssueTriageService:
 
 
 issue_triage_service: IssueTriageService | None = None
+issue_triage_service_lock = threading.Lock()
 
 
 def get_issue_triage_service() -> IssueTriageService:
     global issue_triage_service
 
     if issue_triage_service is None:
-        issue_triage_service = IssueTriageService(
-            github_client=GitHubClient(),
-            groq_service=GroqService(),
-        )
+        with issue_triage_service_lock:
+            if issue_triage_service is None:
+                issue_triage_service = IssueTriageService(
+                    github_client=GitHubClient(),
+                    groq_service=GroqService(),
+                )
 
     return issue_triage_service

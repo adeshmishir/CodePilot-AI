@@ -1,3 +1,5 @@
+import threading
+
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct
 
@@ -10,6 +12,7 @@ COLLECTION_NAME = "code_chunks"
 
 
 _vector_store: "VectorStore | None" = None
+_vector_store_lock = threading.Lock()
 
 
 def get_vector_store() -> "VectorStore":
@@ -17,12 +20,16 @@ def get_vector_store() -> "VectorStore":
 
     Local Qdrant storage can only be opened by one QdrantClient per
     process, so every component must reuse a single instance instead of
-    constructing new ones per request.
+    constructing new ones per request. The lock prevents two threads from
+    creating a second client concurrently (e.g. an index worker racing a
+    search request), which would duplicate the client's memory footprint.
     """
     global _vector_store
 
     if _vector_store is None:
-        _vector_store = VectorStore()
+        with _vector_store_lock:
+            if _vector_store is None:
+                _vector_store = VectorStore()
 
     return _vector_store
 
