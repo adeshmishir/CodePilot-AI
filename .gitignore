@@ -7,70 +7,178 @@ __pycache__/
 *.pyd
 *.so
 *.egg-info/
+*.egg
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
 .coverage
+.coverage.*
+.coverage.xml
 htmlcov/
+.tox/
+.nox/
+docs/_build/
+.ipynb_checkpoints/
+.ipython/
+profile_default/
+.ropeproject/
+instance/
 
 # ==========================
 # Virtual Environment
 # ==========================
 .venv/
 venv/
+venv.bak/
 env/
+env.bak/
+.conda/
 
 # ==========================
 # Environment Variables
 # ==========================
+# Never commit real .env files (secrets). Keep .env.example / .env.sample.
+.env
+.env.*
+!.env.example
+!.env.sample
+*.env
+*.env.*
+!.env.example
+!.env.sample
 backend/.env
 frontend/.env
-.env
+frontend/.env.production
+backend/.env.production
 
 # ==========================
-# IDE
+# IDE / Editors
 # ==========================
 .vscode/
+.vscode/*
+!.vscode/extensions.json
 .idea/
+*.iml
+*.ipr
+*.iws
+.vs/
+.vsconfig
+*.swp
+*.swo
+*~
+*.bak
 
 # ==========================
 # Operating System
 # ==========================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
 
 # ==========================
 # Logs
 # ==========================
 *.log
+logs/
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # ==========================
 # Build & Distribution
 # ==========================
 build/
 dist/
+out/
+target/
+*.tgz
+*.tar.gz
+*.zip
 
 # ==========================
-# Node Modules
+# Node
 # ==========================
 node_modules/
+.npm/
+.pnpm-store/
+*.local
+yarn.lock.cached
+.pnp.*
+.pnp.cache/
 
 # ==========================
-# Frontend Build
+# Frontend
 # ==========================
 frontend/dist/
+frontend/.vite/
+frontend/coverage/
+frontend/tsconfig.tsbuildinfo
 
 # ==========================
 # Database
 # ==========================
 *.db
+*.db-journal
+*.sqlite
 *.sqlite3
+*.sqlite-journal
+*.mongo
+*.dump
 
 # ==========================
-# Local Data
+# Local Data / Runtime
 # ==========================
 backend/data/
+backend/uploads/
+uploads/
+media/
+staticfiles/
+*.pid
+*.lock
+*.out
+.tmp/
 
 # ==========================
 # Docker
 # ==========================
-*.pid
+docker/volumes/
+docker/.env
+*.container
+
+# ==========================
+# Secrets & Certificates
+# ==========================
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+id_rsa*
+id_ed25519*
+*.secret
+
+# ==========================
+# Test / Coverage Artifacts
+# ==========================
+.coverage
+coverage/
+htmlcov/
+.report/
+*.lcov
+result/
+playwright-report/
+test-results/
