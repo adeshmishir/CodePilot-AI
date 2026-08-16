@@ -8,12 +8,10 @@ import { ThemeContext, type Theme } from "@/context/theme-context"
 const STORAGE_KEY = "codepilot-theme"
 
 function getInitialTheme(): Theme {
-  if (typeof window === "undefined") return "light"
+  if (typeof window === "undefined") return "dark"
   const stored = window.localStorage.getItem(STORAGE_KEY)
   if (stored === "light" || stored === "dark") return stored
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light"
+  return "dark"
 }
 
 function applyTheme(theme: Theme) {
