@@ -2,6 +2,7 @@ FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV OMP_NUM_THREADS=1
 
 WORKDIR /app
 
@@ -22,4 +23,7 @@ RUN uv sync --frozen --no-dev
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT"]
+# Run exactly one Uvicorn worker. The embedding model (FastEmbed/ONNX) is
+# loaded once per process; multiple workers would duplicate that ~150 MB model
+# footprint and OOM a 512 MB instance.
+CMD ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1"]

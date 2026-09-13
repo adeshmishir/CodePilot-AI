@@ -279,7 +279,8 @@ def test_clone_new_repository(client):
     assert status_body["status"] == "done"
     assert status_body["repository_id"] == 1
     assert status_body["message"] == (
-        "Cloned and indexed 3 files into 5 chunks and 5 vectors."
+        "Clone and index complete: indexed 3 of 3 files into "
+        "5 chunks and 5 vectors."
     )
 
     assert client.fake_indexer.calls == [
@@ -350,8 +351,8 @@ def test_clone_existing_broken_repository_is_reindexed(
 
     assert status_body["status"] == "done"
     assert status_body["message"] == (
-        "Repository recovered and re-indexed 3 files into 5 chunks and "
-        "5 vectors."
+        "Repository recovered and re-indexed: indexed 3 of 3 files into "
+        "5 chunks and 5 vectors."
     )
 
     assert client.fake_indexer.calls == [
@@ -464,7 +465,7 @@ def test_reindex_repository(client):
     assert body["repository"] == "CoinOracle"
     assert body["owner"] == "adeshmishir"
     assert body["message"] == (
-        "Reindexed 3 files into 5 chunks and 5 vectors."
+        "Reindexed: indexed 3 of 3 files into 5 chunks and 5 vectors."
     )
 
     assert client.fake_indexer.calls == [

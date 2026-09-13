@@ -251,15 +251,15 @@ class GitService:
     def _clone_repository(self, url: str, destination: Path) -> None:
         clone_url = self._build_clone_url(url)
 
-        parsed = urlparse(clone_url)
-        hostname = parsed.hostname.lower() if parsed.hostname else ""
-        is_github = hostname == GITHUB_HOST
-
         try:
+            # Always clone shallow — the full object database and history for
+            # a big monorepo can easily be hundreds of MB, so even "well
+            # behaved" repositories can OOM a 512 MB instance during the
+            # checkout/fsck that git performs after logging the progress.
             Repo.clone_from(
                 clone_url,
                 destination,
-                depth=1 if is_github else None,
+                depth=1,
                 env={"GIT_TERMINAL_PROMPT": "0"},
             )
         except Exception as error:

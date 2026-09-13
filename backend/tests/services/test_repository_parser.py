@@ -172,3 +172,52 @@ def test_missing_file_size_does_not_break_discovery(tmp_path, monkeypatch):
     files = parser.get_repository_files(tmp_path)
 
     assert files == []
+
+
+def test_scan_repository_reports_eligible_and_skipped_reasons(tmp_path):
+    parser = RepositoryParser()
+
+    write_file(tmp_path, "src/a.py")
+    write_file(tmp_path, "src/b.py")
+    write_file(tmp_path, "notes.xyz")
+    write_file(tmp_path, "node_modules/lib.js")
+
+    report = parser.scan_repository(tmp_path)
+
+    assert report["eligible"] == 2
+    assert report["files"] == 2
+    assert report["skipped"]["unsupported_extension"] == 1
+    assert report["skipped"]["ignored_directory"] == 2
+
+
+def test_scan_repository_counts_overflow_when_capped(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "MAX_INDEX_FILES", 2)
+
+    parser = RepositoryParser()
+
+    write_file(tmp_path, "a.py")
+    write_file(tmp_path, "b.py")
+    write_file(tmp_path, "c.py")
+
+    report = parser.scan_repository(tmp_path)
+
+    assert report["eligible"] == 3
+    assert report["files"] == 2
+    assert report["skipped"]["max_index_files"] == 1
+
+
+def test_iter_repository_files_matches_get_and_caps(tmp_path, monkeypatch):
+    parser = RepositoryParser()
+
+    write_file(tmp_path, "a.py")
+    write_file(tmp_path, "b.py")
+
+    iterated = {path.name for path in parser.iter_repository_files(tmp_path)}
+
+    assert iterated == {"a.py", "b.py"}
+
+    monkeypatch.setattr(settings, "MAX_INDEX_FILES", 1)
+
+    capped = list(parser.iter_repository_files(tmp_path))
+
+    assert len(capped) == 1

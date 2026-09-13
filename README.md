@@ -179,6 +179,7 @@ Backend (`backend/.env`) — copy from `backend/.env.example`:
 | `GITHUB_TOKEN` | For GitHub features | Classic personal access token with `repo` scope (`public_repo` for public repos). Used for clone auth, PR review, and issue triage |
 | `DATABASE_URL` | For persistence | PostgreSQL connection string (e.g. `postgresql+psycopg://user:pass@localhost:5432/codepilot`) |
 | `QDRANT_URL` | No | `:memory:` (default) for local in-memory vectors, else a running Qdrant instance (`http://localhost:6333`). Must be persistent when `DEBUG=False` |
+| `QDRANT_API_KEY` | No | API key for hosted Qdrant clusters |
 | `CORS_ORIGINS` | No | JSON list of allowed browser origins (e.g. `["http://localhost:5173"]`) |
 | `EMBEDDING_MODEL` | No | FastEmbed model (default `BAAI/bge-small-en-v1.5`) |
 | `GROQ_MODEL` | No | Groq model (default `llama-3.3-70b-versatile`) |
@@ -186,9 +187,11 @@ Backend (`backend/.env`) — copy from `backend/.env.example`:
 | `HOST` / `PORT` | No | Bind address/port (default `127.0.0.1:8000`) |
 | `APP_NAME` / `APP_VERSION` | No | App metadata |
 | `RAG_CONTEXT_MAX_CHARS` | No | Max chars of context injected into RAG prompts |
+| `TOP_K` | No | Number of context snippets retrieved per query (default `5`) |
 | `AGENT_MAX_STEPS` | No | Max tool steps per agent run |
 | `INDEX_BATCH_SIZE` | No | Embedding batch size during indexing |
 | `MAX_INDEX_FILE_SIZE_MB` | No | Skip files larger than this when indexing |
+| `MAX_FILE_SIZE_BYTES` | No | Explicit byte override for the file size cap; `0` = use `MAX_INDEX_FILE_SIZE_MB` |
 | `MAX_INDEX_FILES` | No | Cap on indexed files per repository |
 
 Frontend (`frontend/.env`) — copy from `frontend/.env.example`:
@@ -272,6 +275,67 @@ The compose stack runs:
 
 Named volumes persist Postgres data (`postgres_data`), Qdrant storage
 (`qdrant_data`), and cloned repositories (`repo_data`).
+
+## Production deployment (Render, 512 MB free tier)
+
+The backend is designed to run on a single **512 MB** Render instance. A
+ready-to-use `render.yaml` blueprint is included at the repo root.
+
+### Managed services (external to the instance)
+
+- **Neon Postgres** — set `DATABASE_URL` to the Neon connection string
+  (`postgresql://user:pass@host/db?sslmode=require`).
+- **Qdrant Cloud** — set `QDRANT_URL` (cluster HTTPS endpoint) and
+  `QDRANT_API_KEY`. In-memory Qdrant is **rejected in production**
+  (`DEBUG=False`) because the vector index would not survive restarts.
+
+### Backend service
+
+```yaml
+# render.yaml (blueprint) — deploy via "New → Blueprint" or the dashboard
+services:
+  - type: web
+    name: codepilot-backend
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    plan: starter
+    envVars:
+      - key: GITHUB_TOKEN
+        sync: false        # set these in the dashboard
+      - key: GROQ_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: DEBUG
+        value: "False"
+      - key: PORT
+        value: "10000"
+```
+
+### 512 MB memory budget
+
+- **One Uvicorn worker** — the Dockerfile starts `uvicorn ... --workers 1`.
+  The embedding model (FastEmbed/ONNX, ~150 MB) is loaded once per process;
+  extra workers would multiply that footprint.
+- **Shallow clones** — repositories are cloned with `--depth 1` so the full
+  object database/history is never downloaded.
+- **Streaming indexer** — files are discovered, parsed, embedded, and
+  committed one at a time (batches of `INDEX_BATCH_SIZE`), so peak memory is a
+  single file, not the whole repository.
+- **File caps** — `MAX_INDEX_FILE_SIZE_MB=0.5` skips huge/minified/generated
+  files and `MAX_INDEX_FILES=1000` caps how many files are indexed per repo;
+  both are configurable via env vars.
+- **Tuned environment** — `OMP_NUM_THREADS=1` limits ONNX/OpenMP thread pools.
+
+If indexing still approaches the cap on very large repositories, lower
+`INDEX_BATCH_SIZE` to `1` and `MAX_INDEX_FILES` until steady-state RSS (logged
+during indexing) stays well under the limit.
 
 ## Roadmap
 

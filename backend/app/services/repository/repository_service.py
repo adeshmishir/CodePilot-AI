@@ -56,13 +56,15 @@ class RepositoryService:
     ):
         """Index a repository, reporting progress through ``progress(done, total)``.
 
-        Every file is committed to the database in its own transaction so
-        progress is pushed to the database progressively instead of being
-        buffered in memory and committed only at the end. This bounds peak
-        memory to a single file at a time, which is what pushed the
-        free-tier instance over its 512 MB limit on larger repositories.
-        A file that fails to index is skipped so one bad file cannot stop
-        the whole repository from being indexed.
+        Files are discovered and parsed one at a time and each file's chunk
+        rows are committed in their own transaction, so peak memory is
+        bounded to a single file (plus a small embedding batch) instead of
+        the whole repository. A file that fails to index is skipped so one
+        bad file cannot stop the whole repository from being indexed.
+
+        The returned summary reports how many files were indexed and why
+        the rest were skipped, so the UI can show "Indexed X, Skipped Y"
+        without silently pretending a repository is fully covered.
         """
         from app.services.indexing.vector_indexer import VectorIndexer
         from app.services.parser.repository_parser import repository_parser
@@ -82,11 +84,11 @@ class RepositoryService:
 
         self._sync_local_path(repository, path, db)
 
-        files = repository_parser.get_repository_files(
-            self._app_relative(path)
-        )
+        root = self._app_relative(path)
 
-        if not files:
+        scan = repository_parser.scan_repository(root)
+
+        if scan["files"] == 0:
             raise RepositoryIndexError(
                 NO_SUPPORTED_FILES_MESSAGE
             )
@@ -99,11 +101,44 @@ class RepositoryService:
         total_vectors = 0
         new_point_ids: set[int] = set()
         rows_replaced = False
+        indexed_files = 0
+        failed_files = 0
         processed_files = 0
-        total_files = len(files)
+        total_files = scan["files"]
+        skipped_reasons = dict(scan["skipped"])
 
-        for file_chunks in self.indexer.iter_file_chunks(files):
+        def _count_skip(reason: str) -> None:
+            skipped_reasons[reason] = (
+                skipped_reasons.get(reason, 0) + 1
+            )
+
+        for file_path in repository_parser.iter_repository_files(root):
             try:
+                file_chunks = self.indexer.build_chunks([file_path])
+            except Exception as error:
+                db.rollback()
+                failed_files += 1
+                _count_skip("parse_failed")
+                print(
+                    f"Failed parsing {file_path}: {error}"
+                )
+                processed_files += 1
+
+                if progress is not None:
+                    progress(processed_files, total_files)
+
+                continue
+
+            try:
+                if not file_chunks:
+                    _count_skip("no_code_symbols")
+                    processed_files += 1
+
+                    if progress is not None:
+                        progress(processed_files, total_files)
+
+                    continue
+
                 if not rows_replaced:
                     db.query(CodeChunkModel).filter(
                         CodeChunkModel.repository_id == repository_id
@@ -141,12 +176,15 @@ class RepositoryService:
                 total_vectors += vectors
                 new_point_ids.update(point_ids)
 
+                indexed_files += 1
                 processed_files += 1
 
                 if progress is not None:
                     progress(processed_files, total_files)
             except Exception as error:
                 db.rollback()
+                failed_files += 1
+                _count_skip("index_failed")
                 print(
                     f"Failed indexing a file for repository "
                     f"{repository_id}: {error}"
@@ -178,8 +216,14 @@ class RepositoryService:
 
         db.commit()
 
+        skipped_files = total_files - indexed_files
+
         return {
-            "files_discovered": len(files),
+            "files_discovered": total_files,
+            "files_indexed": indexed_files,
+            "files_skipped": skipped_files,
+            "files_failed": failed_files,
+            "skipped_reasons": skipped_reasons,
             "chunks_created": total_chunks,
             "vectors_indexed": total_vectors,
         }

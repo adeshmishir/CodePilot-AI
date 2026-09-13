@@ -1,0 +1,64 @@
+# Render blueprint for the CodePilot AI backend.
+#
+# Deploy: Render dashboard → "New" → "Blueprint", or connect this repo and
+# select this file. The backend runs as a single Docker web service sized for
+# the 512 MB free tier:
+#   - exactly one Uvicorn worker (set in the Dockerfile)
+#   - shallow git clones (--depth 1)
+#   - streaming file-by-file indexer with per-file transaction commits
+#   - OMP_NUM_THREADS=1 to cap ONNX/OpenMP thread pools
+#
+# Secrets (GROQ_API_KEY, GITHUB_TOKEN, DATABASE_URL, QDRANT_URL,
+# QDRANT_API_KEY) are marked sync:false so you fill them in on the dashboard
+# once; they are never committed to the repository.
+services:
+  - type: web
+    name: codepilot-backend
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_NAME
+        value: CodePilot AI
+      - key: APP_VERSION
+        value: 0.1.0
+      - key: DEBUG
+        value: "False"
+      - key: PORT
+        value: "10000"
+      - key: HOST
+        value: "0.0.0.0"
+      - key: CORS_ORIGINS
+        value: '["https://code-pilot-ai-puce.vercel.app","http://localhost:5173","http://127.0.0.1:5173"]'
+      - key: EMBEDDING_MODEL
+        value: BAAI/bge-small-en-v1.5
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: TOP_K
+        value: "5"
+      - key: RAG_CONTEXT_MAX_CHARS
+        value: "8000"
+      - key: AGENT_MAX_STEPS
+        value: "5"
+      - key: INDEX_BATCH_SIZE
+        value: "2"
+      - key: MAX_INDEX_FILE_SIZE_MB
+        value: "0.5"
+      - key: MAX_FILE_SIZE_BYTES
+        value: "0"
+      - key: MAX_INDEX_FILES
+        value: "1000"
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false

@@ -424,7 +424,7 @@ def test_recover_repository_uses_shallow_depth(tmp_path, monkeypatch):
     assert captured["depth"] == 1
 
 
-def test_non_github_clone_is_not_shallow(tmp_path, monkeypatch):
+def test_non_github_clone_is_shallow(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "GITHUB_TOKEN", "")
     service = make_service(tmp_path)
 
@@ -433,10 +433,10 @@ def test_non_github_clone_is_not_shallow(tmp_path, monkeypatch):
     service.clone_repository("https://gitlab.com/owner/repo")
 
     assert captured["url"] == "https://gitlab.com/owner/repo"
-    assert captured["depth"] is None
+    assert captured["depth"] == 1
 
 
-def test_local_path_clone_is_not_shallow(tmp_path, monkeypatch):
+def test_local_path_clone_is_shallow(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "GITHUB_TOKEN", "")
     service = make_service(tmp_path)
 
@@ -444,4 +444,4 @@ def test_local_path_clone_is_not_shallow(tmp_path, monkeypatch):
 
     service.clone_repository((tmp_path / "some" / "repo").as_posix())
 
-    assert captured["depth"] is None
+    assert captured["depth"] == 1

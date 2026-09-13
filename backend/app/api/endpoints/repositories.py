@@ -34,6 +34,35 @@ def _friendly_clone_error(error: Exception) -> str:
     return message or "Repository clone failed."
 
 
+def _summarize_index_result(index_result: dict) -> str:
+    """Sentence-fragment summary of what an indexing pass produced."""
+    discovered = index_result["files_discovered"]
+    indexed = index_result.get(
+        "files_indexed",
+        discovered,
+    )
+    skipped = index_result.get("files_skipped", 0) or 0
+    failed = index_result.get("files_failed", 0) or 0
+
+    summary = (
+        f"indexed {indexed} of {discovered} files into "
+        f"{index_result['chunks_created']} chunks and "
+        f"{index_result['vectors_indexed']} vectors"
+    )
+
+    if skipped or failed:
+        extras: list[str] = []
+
+        if skipped:
+            extras.append(f"{skipped} skipped")
+        if failed:
+            extras.append(f"{failed} failed")
+
+        summary += f" ({', '.join(extras)})"
+
+    return summary
+
+
 def _run_clone_job(
     job_id: str,
     url: str,
@@ -126,16 +155,13 @@ def _run_clone_job(
 
             if existed:
                 message = (
-                    f"Repository recovered and re-indexed "
-                    f"{index_result['files_discovered']} files into "
-                    f"{index_result['chunks_created']} chunks and "
-                    f"{index_result['vectors_indexed']} vectors."
+                    f"Repository recovered and re-indexed: "
+                    f"{_summarize_index_result(index_result)}."
                 )
             else:
                 message = (
-                    f"Cloned and indexed {index_result['files_discovered']} "
-                    f"files into {index_result['chunks_created']} chunks and "
-                    f"{index_result['vectors_indexed']} vectors."
+                    f"Clone and index complete: "
+                    f"{_summarize_index_result(index_result)}."
                 )
         else:
             message = "Repository already exists and is up to date."
@@ -146,6 +172,21 @@ def _run_clone_job(
             phase="indexing",
             message=message,
             repository_id=repository.id,
+            files_indexed=(
+                index_result.get("files_indexed")
+                if "index_result" in locals()
+                else None
+            ),
+            files_skipped=(
+                index_result.get("files_skipped")
+                if "index_result" in locals()
+                else None
+            ),
+            skipped_reasons=(
+                index_result.get("skipped_reasons")
+                if "index_result" in locals()
+                else None
+            ),
         )
     except CloneCancelledError:
         db.rollback()
@@ -364,9 +405,7 @@ def reindex_repository(
         "owner": repository.owner,
         "local_path": repository.local_path,
         "message": (
-            f"Reindexed {result['files_discovered']} files into "
-            f"{result['chunks_created']} chunks and "
-            f"{result['vectors_indexed']} vectors."
+            f"Reindexed: {_summarize_index_result(result)}."
         ),
     }
 

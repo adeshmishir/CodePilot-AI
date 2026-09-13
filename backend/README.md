@@ -67,17 +67,20 @@ Copy `backend/.env.example` to `backend/.env`. Key variables:
 | `GROQ_API_KEY` | Yes (AI features) | Groq API key |
 | `GITHUB_TOKEN` | GitHub features | Classic PAT with `repo` scope |
 | `DATABASE_URL` | Persistence | PostgreSQL connection string |
-| `QDRANT_URL` | No | `:memory:` (dev) or `http://qdrant:6333` (prod); must be persistent when `DEBUG=False` |
+| `QDRANT_URL` | No | Empty/`:memory:` (dev), or remote cluster URL; must be persistent when `DEBUG=False` |
+| `QDRANT_API_KEY` | No | API key for hosted Qdrant clusters |
 | `CORS_ORIGINS` | No | JSON list of allowed origins |
 | `EMBEDDING_MODEL` | No | FastEmbed model (default `BAAI/bge-small-en-v1.5`) |
 | `GROQ_MODEL` | No | Groq model (default `llama-3.3-70b-versatile`) |
 | `DEBUG` | No | Enables in-memory Qdrant fallback |
 | `HOST` / `PORT` | No | Bind address/port |
 | `RAG_CONTEXT_MAX_CHARS` | No | Max context chars injected into RAG prompts |
+| `TOP_K` | No | Number of context snippets retrieved per query (default `5`) |
 | `AGENT_MAX_STEPS` | No | Max tool steps per agent run |
 | `INDEX_BATCH_SIZE` | No | Embedding batch size during indexing |
-| `MAX_INDEX_FILE_SIZE_MB` | No | Max indexed file size |
-| `MAX_INDEX_FILES` | No | Cap on indexed files per repository |
+| `MAX_INDEX_FILE_SIZE_MB` | No | Max indexed file size (default `0.5`) |
+| `MAX_FILE_SIZE_BYTES` | No | Explicit byte override for file size cap; `0` = use `MAX_INDEX_FILE_SIZE_MB` |
+| `MAX_INDEX_FILES` | No | Cap on indexed files per repository (default `1000`) |
 
 ## API endpoints
 

@@ -143,54 +143,134 @@ class RepositoryParser:
         except OSError:
             return True
 
+    def _classify_file(
+        self,
+        file_path: Path,
+        max_bytes: int | None = None,
+    ) -> str | None:
+        """Decide whether a path is indexable.
+
+        Returns ``None`` when the path is a source file CodePilot should
+        index, otherwise a short reason string explaining why it is
+        skipped. Skipping reasons are used to report an "Indexed X /
+        Skipped Y (reason...)" breakdown without crashing on a single
+        problematic file.
+        """
+        if any(
+            ignored in file_path.parts
+            for ignored in self.IGNORED_DIRECTORIES
+        ):
+            return "ignored_directory"
+
+        # Directories (and unreadable entries) are not files and are never
+        # indexed. They are excluded from the skip counters below so a
+        # "Skipped Y" summary counts actual files, not every directory.
+        try:
+            if not file_path.is_file():
+                return "not_a_file"
+        except OSError:
+            return "not_a_file"
+
+        if file_path.suffix.lower() not in self.SUPPORTED_EXTENSIONS:
+            return "unsupported_extension"
+
+        name = file_path.name.lower()
+
+        if name in self.IGNORED_FILES:
+            return "ignored_filename"
+
+        if name.endswith(self.MINIFIED_SUFFIXES):
+            return "minified"
+
+        if max_bytes is None:
+            max_bytes = settings.max_file_size_bytes()
+
+        try:
+            if file_path.stat().st_size > max_bytes:
+                return "too_large"
+        except OSError:
+            return "unreadable"
+
+        if self._is_binary(file_path):
+            return "binary"
+
+        return None
+
+    def scan_repository(
+        self,
+        repository_path: Path,
+    ) -> dict:
+        """Count indexable files and skipped entries without holding paths.
+
+        Walks the repository once, storing nothing but counters, so even a
+        repository with tens of thousands of entries never accumulates a
+        list of every file path in memory. Returns::
+
+            {
+                "files": int,       # files that will be indexed (post-cap)
+                "eligible": int,    # all indexable files before the cap
+                "skipped": {...},   # reason -> count (files only)
+            }
+        """
+        skipped: dict[str, int] = {}
+        eligible = 0
+        max_files = settings.MAX_INDEX_FILES
+
+        for file_path in repository_path.rglob("*"):
+            reason = self._classify_file(file_path)
+
+            if reason is None:
+                eligible += 1
+                continue
+
+            if reason == "not_a_file":
+                continue
+
+            skipped[reason] = skipped.get(reason, 0) + 1
+
+        selected = eligible
+
+        if max_files > 0 and eligible > max_files:
+            overflow = eligible - max_files
+            skipped["max_index_files"] = (
+                skipped.get("max_index_files", 0) + overflow
+            )
+            selected = max_files
+
+        return {
+            "files": selected,
+            "eligible": eligible,
+            "skipped": skipped,
+        }
+
+    def iter_repository_files(
+        self,
+        repository_path: Path,
+    ):
+        """Yield indexable source files one at a time.
+
+        Only a single path object is alive at any moment and iteration
+        stops once ``MAX_INDEX_FILES`` files have been produced, so the
+        full repository is never materialized as a list of paths.
+        """
+        max_files = settings.MAX_INDEX_FILES
+        yielded = 0
+
+        for file_path in repository_path.rglob("*"):
+            if self._classify_file(file_path) is not None:
+                continue
+
+            if max_files > 0 and yielded >= max_files:
+                return
+
+            yielded += 1
+            yield file_path
+
     def get_repository_files(
         self,
         repository_path: Path,
     ) -> list[Path]:
-        files: list[Path] = []
-
-        max_bytes = int(settings.MAX_INDEX_FILE_SIZE_MB * 1024 * 1024)
-        max_files = settings.MAX_INDEX_FILES
-
-        for file_path in repository_path.rglob("*"):
-            if any(
-                ignored in file_path.parts
-                for ignored in self.IGNORED_DIRECTORIES
-            ):
-                continue
-
-            if file_path.suffix.lower() not in self.SUPPORTED_EXTENSIONS:
-                continue
-
-            name = file_path.name.lower()
-
-            if name in self.IGNORED_FILES or name.endswith(
-                self.MINIFIED_SUFFIXES
-            ):
-                continue
-
-            try:
-                if (
-                    not file_path.is_file()
-                    or file_path.stat().st_size > max_bytes
-                ):
-                    continue
-            except OSError:
-                continue
-
-            if self._is_binary(file_path):
-                continue
-
-            files.append(file_path)
-
-        if max_files and len(files) > max_files:
-            print(
-                f"Repository has more than {max_files} supported files; "
-                f"indexing the first {max_files} to bound memory usage."
-            )
-            files = files[:max_files]
-
-        return files
+        return list(self.iter_repository_files(repository_path))
 
 
 repository_parser = RepositoryParser()
