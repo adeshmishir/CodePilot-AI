@@ -182,8 +182,18 @@ def _run_clone_job(
                 if "index_result" in locals()
                 else None
             ),
+            files_failed=(
+                index_result.get("files_failed")
+                if "index_result" in locals()
+                else None
+            ),
             skipped_reasons=(
                 index_result.get("skipped_reasons")
+                if "index_result" in locals()
+                else None
+            ),
+            failed_reasons=(
+                index_result.get("failed_reasons")
                 if "index_result" in locals()
                 else None
             ),

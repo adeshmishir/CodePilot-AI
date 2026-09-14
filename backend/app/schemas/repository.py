@@ -24,7 +24,9 @@ class CloneJobStatusResponse(BaseModel):
     files_total: int = 0
     files_indexed: int | None = None
     files_skipped: int | None = None
+    files_failed: int | None = None
     skipped_reasons: dict[str, int] | None = None
+    failed_reasons: dict[str, int] | None = None
     message: str = ""
     error: str = ""
     repository_id: int | None = None

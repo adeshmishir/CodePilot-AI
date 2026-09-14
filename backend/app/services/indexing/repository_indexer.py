@@ -73,18 +73,66 @@ class RepositoryIndexer:
 
         db.commit()
 
+    def replace_file_chunks(
+        self,
+        chunks: list[CodeChunk],
+        repository_id: int,
+        db: Session
+    ) -> None:
+        """Replace the persisted chunk rows for a single file.
+
+        Only the rows belonging to ``chunks[0].file_path`` are removed, so
+        this is safe to call once per file while streaming a repository:
+        it never touches (or re-inserts) any other file's rows.
+        """
+        if not chunks:
+            return
+
+        file_path = chunks[0].file_path
+
+        db.query(CodeChunkModel).filter(
+            CodeChunkModel.repository_id == repository_id,
+            CodeChunkModel.file_path == file_path,
+        ).delete(synchronize_session=False)
+
+        for chunk in chunks:
+            db.add(CodeChunkModel(
+                repository_id=repository_id,
+                file_path=chunk.file_path,
+                symbol_name=chunk.symbol_name,
+                symbol_type=chunk.symbol_type,
+                start_line=chunk.start_line,
+                end_line=chunk.end_line,
+                content=chunk.content,
+            ))
+
+        db.commit()
+
     def index_files(
         self,
         files: list[Path],
         repository_id: int,
         db: Session
     ) -> list[CodeChunk]:
-        chunks = self.build_chunks(files)
+        """Index files, streaming one file's chunks at a time.
 
-        self.replace_chunks(
-            chunks=chunks,
-            repository_id=repository_id,
-            db=db,
-        )
+        Persistence is committed per file via ``replace_file_chunks`` so
+        peak memory is bounded to a single file instead of holding the
+        whole repository's chunk list (and a matching transaction) in
+        memory. ``build_chunks`` remains for lower-level single-file uses.
+        """
+        chunks: list[CodeChunk] = []
+
+        for file_chunks in self.iter_file_chunks(files):
+            if not file_chunks:
+                continue
+
+            self.replace_file_chunks(
+                chunks=file_chunks,
+                repository_id=repository_id,
+                db=db,
+            )
+
+            chunks.extend(file_chunks)
 
         return chunks
