@@ -22,7 +22,6 @@ class Settings(BaseSettings):
     QDRANT_URL: str = ":memory:"
     QDRANT_API_KEY: str = ""
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
-    GROQ_MODEL: str = "openai/gpt-oss-20b"
     RAG_CONTEXT_MAX_CHARS: int = 8000
     TOP_K: int = 5
     AGENT_MAX_STEPS: int = 5

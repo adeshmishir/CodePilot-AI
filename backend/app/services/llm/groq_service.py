@@ -2,6 +2,8 @@ from groq import Groq
 
 from app.config.settings import settings
 
+GROQ_MODEL = "openai/gpt-oss-20b"
+
 
 class GroqService:
     """Thin wrapper around the Groq chat completions API."""
@@ -14,7 +16,7 @@ class GroqService:
             )
 
         self.client = Groq(api_key=settings.GROQ_API_KEY)
-        self.model = model or settings.GROQ_MODEL
+        self.model = model or GROQ_MODEL
 
     def generate(
         self,
