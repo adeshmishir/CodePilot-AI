@@ -15,6 +15,7 @@ from app.services.github.git_service import git_service
 from app.services.repository.paths import (
     backend_root,
     normalize_local_path,
+    posix_path,
     relative_local_path,
 )
 
@@ -150,7 +151,7 @@ class RepositoryService:
             db.execute(
                 insert(RepositoryManifestModel).values(
                     repository_id=repository_id,
-                    file_path=file_path,
+                    file_path=posix_path(file_path),
                     size_bytes=size_bytes,
                     index_status=index_status,
                     skip_reason=skip_reason,
@@ -231,7 +232,7 @@ class RepositoryService:
 
                     batch.append({
                         "repository_id": repository_id,
-                        "file_path": str(file_path),
+                        "file_path": posix_path(file_path),
                         "size_bytes": _file_size(file_path),
                         "index_status": "skipped",
                         "skip_reason": "max_index_files",
@@ -241,7 +242,7 @@ class RepositoryService:
                 else:
                     batch.append({
                         "repository_id": repository_id,
-                        "file_path": str(file_path),
+                        "file_path": posix_path(file_path),
                         "size_bytes": _file_size(file_path),
                         "index_status": "skipped",
                         "skip_reason": reason,

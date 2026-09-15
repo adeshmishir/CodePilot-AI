@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.endpoints import agent
 from app.api.endpoints import bug_detection
 from app.api.endpoints import chat
+from app.api.endpoints import files
 from app.api.endpoints import github
 from app.api.endpoints import health
 from app.api.endpoints import repositories
@@ -37,4 +38,8 @@ router.include_router(
 
 router.include_router(
     github.router
+)
+
+router.include_router(
+    files.router
 )

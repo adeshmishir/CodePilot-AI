@@ -20,3 +20,13 @@ class RepositoryIndexError(Exception):
         self.detail = detail
 
         super().__init__(self.message)
+
+
+class RepositoryPathError(Exception):
+    """
+    Raised when a repository file cannot be read from the local checkout.
+    """
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(self.message)

@@ -9,6 +9,7 @@ from app.agents.prompts import FINAL_ANSWER_PROMPT, final_answer_user_prompt
 from app.agents.state import AgentState
 from app.config.settings import settings
 from app.services.llm.groq_service import GroqService
+from app.services.repository.paths import posix_path
 from app.services.retrieval.retrieval_service import (
     RetrievalService,
     get_retrieval_service,
@@ -142,7 +143,21 @@ class AgentService:
             repository_id=repository_id
         ).get("files", [])
 
-        return file_path in files
+        requested = posix_path(file_path)
+
+        for item in files:
+            stored = posix_path(item)
+
+            if stored == requested:
+                return True
+
+            # Also accept a full checkout-prefixed path (e.g.
+            # ``data/repos/o/n/backend/main.py``) supplied by the planner
+            # when the listing is repo-relative.
+            if requested and stored.endswith("/" + requested):
+                return True
+
+        return False
 
     def _resolve_step_limit(self, max_steps: int | None) -> int:
         if max_steps is None:

@@ -8,6 +8,14 @@ PLANNER_PROMPT = (
     "Do not invent tools.\n"
     "Do not modify repository files.\n"
     "Do not execute arbitrary commands.\n\n"
+    "Repository awareness notes:\n"
+    "- 'list_repository_files' answers layout questions and prefixes from "
+    "the index manifest; it is authoritative for file existence.\n"
+    "- 'read_file' reads the real source of a file from disk (pass "
+    "repository-relative paths). Use it to verify behavior instead of "
+    "guessing from embeddings.\n"
+    "- The semantic index covers only a subset of files, so a file absent "
+    "from search results is NOT proof that it does not exist.\n\n"
     "Respond ONLY with a JSON array of step objects. Each step object "
     "must have exactly these fields:\n"
     '  "description": a short description of what the step accomplishes\n'
@@ -27,6 +35,8 @@ FINAL_ANSWER_PROMPT = (
     "Use the developer request and the tool observations.\n"
     "Answer based on repository evidence.\n"
     "Do not invent repository behavior.\n"
+    "The semantic index only covers a subset of the repository, so a file "
+    "not mentioned in observations is not necessarily absent.\n"
     "Mention relevant files and symbols when useful.\n"
     "If the evidence is insufficient, explicitly say so."
 )

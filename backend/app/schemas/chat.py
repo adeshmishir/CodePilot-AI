@@ -17,10 +17,10 @@ class ChatRequest(BaseModel):
 
 class ChatSource(BaseModel):
     file_path: str
-    symbol_name: str
-    start_line: int
-    end_line: int
-    score: float
+    symbol_name: str | None = None
+    start_line: int | None = None
+    end_line: int | None = None
+    score: float | None = None
 
 
 class ChatResponse(BaseModel):

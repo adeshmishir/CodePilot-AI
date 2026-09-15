@@ -147,7 +147,7 @@ class MultiAgentOrchestrator:
         max_steps: int | None,
     ) -> dict:
         if agent == "researcher":
-            return self._run_researcher(repository_id, query)
+            return self._run_researcher(db, repository_id, query)
         if agent == "bug_hunter":
             return self._run_bug_hunter(repository_id, query)
         if agent == "executor":
@@ -156,6 +156,7 @@ class MultiAgentOrchestrator:
 
     def _run_researcher(
         self,
+        db: Session,
         repository_id: int,
         query: str,
     ) -> dict:
@@ -163,6 +164,7 @@ class MultiAgentOrchestrator:
             query=query,
             repository_id=repository_id,
             limit=5,
+            db=db,
         )
 
         detail = _truncate(result["answer"])

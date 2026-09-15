@@ -6,6 +6,15 @@ from app.services.rag.query_classifier import (
 )
 
 
+REPOSITORY_INTENTS = {
+    QueryIntent.STRUCTURE_QUERY,
+    QueryIntent.FILE_LOOKUP_QUERY,
+    QueryIntent.SEMANTIC_CODE_QUERY,
+    QueryIntent.CROSS_FILE_QUERY,
+    QueryIntent.GENERAL_PROJECT_QUERY,
+}
+
+
 @pytest.fixture
 def classifier():
     return QueryClassifier()
@@ -71,4 +80,7 @@ def test_repository_questions_require_context(classifier):
         "what does useWebSocket do in src/",
         "explain the module structure",
     ):
-        assert classifier.classify(query) == QueryIntent.REPOSITORY, query
+        assert classifier.classify(query) != QueryIntent.GENERAL, query
+        assert classifier.classify(query) in REPOSITORY_INTENTS, (
+            query
+        )

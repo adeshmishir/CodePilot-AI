@@ -37,12 +37,13 @@ class FakeRAGService:
     def __init__(self):
         self.calls = []
 
-    def answer(self, query: str, repository_id: int, limit: int = 5):
+    def answer(self, query: str, repository_id: int, limit: int = 5, db=None):
         self.calls.append(
             {
                 "query": query,
                 "repository_id": repository_id,
                 "limit": limit,
+                "db": db,
             }
         )
 
@@ -123,6 +124,7 @@ def test_chat_forwards_request_to_service(client):
             "query": "how does auth work?",
             "repository_id": 1,
             "limit": 3,
+            "db": client.fake_db,
         }
     ]
 
@@ -201,7 +203,7 @@ def test_service_failure_returns_500(monkeypatch):
 
 def test_chat_stream_emits_sse_events(client):
     class StreamingRAGService:
-        def answer_stream(self, query, repository_id, limit=5):
+        def answer_stream(self, query, repository_id, limit=5, db=None):
             yield {"type": "sources", "sources": []}
             yield {"type": "delta", "text": "Authentication "}
             yield {"type": "delta", "text": "lives in src/auth."}

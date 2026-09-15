@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.services.retrieval.retrieval_service import RetrievalService
 from app.tools.base import AgentTool
 from app.tools.code_context import CodeContextTool
+from app.tools.read_file import ReadFileTool
 from app.tools.repository_files import RepositoryFilesTool
 from app.tools.repository_search import SearchRepositoryTool
 
@@ -35,5 +36,6 @@ def build_tool_registry(
             SearchRepositoryTool(retrieval_service),
             RepositoryFilesTool(db),
             CodeContextTool(db),
+            ReadFileTool(db),
         ]
     )

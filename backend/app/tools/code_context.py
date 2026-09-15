@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
 
-from app.models.code_chunk import CodeChunkModel
+from app.services.repository.manifest_service import RepositoryManifestService
+from app.services.repository.paths import posix_path, repo_relative_path
+from app.models.repository import RepositoryModel
 from app.tools.base import AgentTool, ToolError
 
 
@@ -9,7 +11,7 @@ class CodeContextTool(AgentTool):
     description = (
         "Retrieve the indexed code chunks for a specific file in a "
         "repository. Optionally narrow to a single symbol via "
-        "'symbol_name'."
+        "'symbol_name'. Pass the repository-relative 'file_path'."
     )
 
     def __init__(self, db: Session):
@@ -32,33 +34,38 @@ class CodeContextTool(AgentTool):
                 "argument."
             )
 
-        query = (
-            self.db.query(CodeChunkModel)
-            .filter(
-                CodeChunkModel.repository_id == repository_id,
-                CodeChunkModel.file_path == file_path,
-            )
+        manifest = RepositoryManifestService(self.db)
+
+        chunks = manifest.file_chunks(
+            repository_id=repository_id,
+            file_path=file_path,
         )
 
-        if symbol_name:
-            query = query.filter(
-                CodeChunkModel.symbol_name == symbol_name
-            )
-
-        chunks = (
-            query.order_by(CodeChunkModel.start_line).all()
+        repository = (
+            self.db.query(RepositoryModel)
+            .filter(RepositoryModel.id == repository_id)
+            .first()
         )
+
+        root = posix_path(repository.local_path) if repository else ""
+
+        result = []
+
+        for chunk in chunks:
+            if symbol_name and chunk["symbol_name"] != symbol_name:
+                continue
+
+            result.append(
+                {
+                    "file_path": repo_relative_path(root, chunk["file_path"]),
+                    "symbol_name": chunk["symbol_name"],
+                    "symbol_type": chunk["symbol_type"],
+                    "start_line": chunk["start_line"],
+                    "end_line": chunk["end_line"],
+                    "content": chunk["content"],
+                }
+            )
 
         return {
-            "chunks": [
-                {
-                    "file_path": chunk.file_path,
-                    "symbol_name": chunk.symbol_name,
-                    "symbol_type": chunk.symbol_type,
-                    "start_line": chunk.start_line,
-                    "end_line": chunk.end_line,
-                    "content": chunk.content,
-                }
-                for chunk in chunks
-            ]
+            "chunks": result,
         }

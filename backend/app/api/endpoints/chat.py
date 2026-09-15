@@ -51,6 +51,7 @@ def chat_repository(
             query=request.query,
             repository_id=repository_id,
             limit=request.limit,
+            db=db,
         )
     except Exception as error:
         logger.error(
@@ -97,6 +98,7 @@ def chat_repository_stream(
                 query=request.query,
                 repository_id=repository_id,
                 limit=request.limit,
+                db=db,
             ):
                 yield f"data: {json.dumps(event, default=str)}\n\n"
         except Exception as error:
