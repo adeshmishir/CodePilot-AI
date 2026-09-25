@@ -8,6 +8,7 @@ from app.services.rag.query_classifier import (
     QueryClassifier,
     QueryIntent,
 )
+from app.services.presentation import ANSWER_FORMATTING_GUIDELINES
 from app.services.repository.manifest_service import RepositoryManifestService
 from app.services.repository.paths import posix_path, repo_relative_path
 from app.services.retrieval.retrieval_service import (
@@ -51,12 +52,16 @@ SYSTEM_PROMPT = (
     "6. If you need the actual contents of a file not shown in the "
     "RETRIEVED CODE section, say you need to call read_file.\n"
     "7. Keep answers clear and concise."
+    "\n\n"
+    + ANSWER_FORMATTING_GUIDELINES
 )
 
 GENERAL_SYSTEM_PROMPT = (
     "You are CodePilot, an AI software engineering assistant.\n\n"
     "Answer the user's question directly and concisely.\n"
     "If they ask for code, provide a clear, working example."
+    "\n\n"
+    + ANSWER_FORMATTING_GUIDELINES
 )
 
 

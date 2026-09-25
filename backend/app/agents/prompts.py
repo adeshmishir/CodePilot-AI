@@ -1,5 +1,7 @@
 import json
 
+from app.services.presentation import ANSWER_FORMATTING_GUIDELINES
+
 PLANNER_PROMPT = (
     "You are CodePilot's planning component.\n\n"
     "You receive a developer request about a repository.\n"
@@ -39,6 +41,8 @@ FINAL_ANSWER_PROMPT = (
     "not mentioned in observations is not necessarily absent.\n"
     "Mention relevant files and symbols when useful.\n"
     "If the evidence is insufficient, explicitly say so."
+    "\n\n"
+    + ANSWER_FORMATTING_GUIDELINES
 )
 
 

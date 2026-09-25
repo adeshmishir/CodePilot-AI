@@ -147,12 +147,54 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
 }
 
 const HEADING_STYLES: Record<string, string> = {
-  h1: "text-base font-semibold",
+  h1: "text-lg font-bold tracking-tight",
   h2: "text-base font-semibold",
   h3: "text-sm font-semibold",
   h4: "text-sm font-semibold",
-  h5: "text-sm font-semibold",
-  h6: "text-sm font-semibold",
+  h5: "text-sm font-medium",
+  h6: "text-sm font-medium",
+}
+
+function splitTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim())
+}
+
+function isTableDelimiter(line: string): boolean {
+  const cells = splitTableRow(line)
+  return (
+    cells.length > 1 &&
+    cells.every((cell) => /^\s*:?-+:?\s*$/.test(cell))
+  )
+}
+
+function parseTable(
+  lines: string[],
+  start: number,
+): { header: string[]; rows: string[][]; next: number } | null {
+  const headerLine = lines[start]
+  if (!headerLine.includes("|")) return null
+  const delimiter = lines[start + 1]
+  if (!delimiter || !isTableDelimiter(delimiter)) return null
+
+  const header = splitTableRow(headerLine)
+  const rows: string[][] = []
+  let i = start + 2
+  while (
+    i < lines.length &&
+    lines[i].trim() !== "" &&
+    lines[i].includes("|")
+  ) {
+    rows.push(splitTableRow(lines[i]))
+    i++
+  }
+
+  if (rows.length === 0) return null
+  return { header, rows, next: i }
 }
 
 function parseBlocks(markdown: string): ReactNode[] {
@@ -256,6 +298,48 @@ function parseBlocks(markdown: string): ReactNode[] {
       out.push(
         <CodeBlock key={blockKey++} code={code} language={language} />,
       )
+      continue
+    }
+
+    const table = parseTable(lines, i)
+    if (table) {
+      flushParagraph()
+      out.push(
+        <div
+          key={blockKey++}
+          className="overflow-x-auto rounded-lg border border-border"
+        >
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr>
+                {table.header.map((cell, index) => (
+                  <th
+                    key={index}
+                    className="bg-muted/50 border-b border-border px-3 py-1.5 text-left font-semibold"
+                  >
+                    {renderInline(cell, `th-${index}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.map((row, rowIndex) => (
+                <tr key={rowIndex} className={rowIndex % 2 ? "bg-muted/20" : ""}>
+                  {row.map((cell, cellIndex) => (
+                    <td
+                      key={cellIndex}
+                      className="border-b border-border/60 px-3 py-1.5 align-top"
+                    >
+                      {renderInline(cell, `td-${rowIndex}-${cellIndex}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      )
+      i = table.next
       continue
     }
 

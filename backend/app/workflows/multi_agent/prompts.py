@@ -1,3 +1,6 @@
+from app.services.presentation import ANSWER_FORMATTING_GUIDELINES
+
+
 ROUTER_PROMPT = (
     "You are the orchestrator of a multi-agent coding assistant.\n\n"
     "You are given a developer request about a repository. Decide which "
@@ -51,6 +54,8 @@ SYNTHESIS_PROMPT = (
     "Prefer concise, well-structured prose over excessive detail.\n"
     "Do not mention the routing, prompting, or synthesis mechanics; "
     "present the result as the assistant's answer."
+    "\n\n"
+    + ANSWER_FORMATTING_GUIDELINES
 )
 
 
